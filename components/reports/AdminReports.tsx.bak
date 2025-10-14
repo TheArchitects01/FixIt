@@ -1,0 +1,373 @@
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Filter, User } from 'lucide-react-native';
+import { Card } from '@/components/common/Card';
+import { StatusBadge } from '@/components/common/StatusBadge';
+import { getAllIssues } from '@/services/mockData';
+import { Issue } from '@/types';
+
+const adminColors = {
+  primary: '#DC2626',
+  secondary: '#FEE2E2',
+};
+
+export function AdminReports() {
+  const router = useRouter();
+  const [filter, setFilter] = useState<'all' | 'pending' | 'in-progress' | 'resolved'>('all');
+  const allReports = getAllIssues();
+  
+  const filteredReports = filter === 'all' 
+    ? allReports 
+    : allReports.filter(report => report.status === filter);
+
+  const handleViewIssue = (issue: Issue) => {
+    router.push(`/admin-issue-detail/${issue.id}`);
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
+  const filterOptions = [
+    { key: 'all', label: 'All' },
+    { key: 'pending', label: 'Pending' },
+    { key: 'in-progress', label: 'In Progress' },
+    { key: 'resolved', label: 'Resolved' },
+  ] as const;
+
+  return (
+    <View style={styles.container}>
+      <View style={[styles.header, { shadowColor: adminColors.primary }]}>
+        <Text style={[styles.title, { color: adminColors.primary }]}>Manage Reports</Text>
+        <Filter size={24} color="#64748B" />
+      </View>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterContainer}>
+        {filterOptions.map((option) => (
+          <TouchableOpacity
+            key={option.key}
+            style={[
+              styles.filterButton,
+              filter === option.key && styles.filterButtonActive,
+            ]}
+            onPress={() => setFilter(option.key)}
+          >
+            <Text
+              style={[
+                styles.filterButtonText,
+                filter === option.key && styles.filterButtonTextActive,
+              ]}
+            >
+              {option.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {filteredReports.map((report) => (
+        <TouchableOpacity
+          key={report.id}
+          onPress={() => handleViewIssue(report)}
+        >
+          <Card style={[styles.reportCard, { 
+            shadowColor: adminColors.primary,
+            borderColor: adminColors.secondary 
+          }]}>
+            <View style={styles.reportHeader}>
+              <View style={styles.reportInfo}>
+                <Text style={styles.reportTitle}>{report.title}</Text>
+                <View style={[styles.studentInfo, { backgroundColor: adminColors.secondary }]}>
+                  <User size={14} color={adminColors.primary} />
+                  <Text style={[styles.studentText, { color: adminColors.primary }]}>
+                    {report.studentName}
+                  </Text>
+                </View>
+                <Text style={styles.locationText}>
+                  {report.location.building} - {report.location.room}
+                </Text>
+                <Text style={styles.dateText}>
+                  {formatDate(report.createdAt)}
+                </Text>
+              </View>
+              {report.photo && (
+                <Image source={{ uri: report.photo }} style={styles.thumbnail} />
+              )}
+            </View>
+            <View style={styles.reportFooter}>
+              <StatusBadge status={report.status} />
+              {report.assignedTo && (
+                <Text style={styles.assignedText}>
+                  Assigned to: {report.assignedTo}
+                </Text>
+              )}
+            </View>
+          </Card>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#DC2626',
+    letterSpacing: -0.5,
+  },
+  filterContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  filterButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: '#FEF2F2',
+    marginRight: 8,
+  },
+  filterButtonActive: {
+    backgroundColor: '#DC2626',
+  }, 24,
+    fontWeight: 'bold',
+    color: '#DC2626',
+    letterSpacing: -0.5,
+  },port { useRouter } from 'expo-router';
+import { Filter, User } from 'lucide-react-native';
+import { Card } from '@/components/common/Card';
+import { StatusBadge } from '@/components/common/StatusBadge';
+import { getAllIssues } from '@/services/mockData';
+import { Issue } from '@/types';
+
+export function AdminReports() {
+  const router = useRouter();
+  const [filter, setFilter] = useState<'all' | 'pending' | 'in-progress' | 'resolved'>('all');
+  const allReports = getAllIssues();
+  
+  const filteredReports = filter === 'all' 
+    ? allReports 
+    : allReports.filter(report => report.status === filter);
+
+  const handleViewIssue = (issue: Issue) => {
+    router.push(`/admin-issue-detail/${issue.id}`);
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
+  const filterOptions = [
+    { key: 'all', label: 'All' },
+    { key: 'pending', label: 'Pending' },
+    { key: 'in-progress', label: 'In Progress' },
+    { key: 'resolved', label: 'Resolved' },
+  ] as const;
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Manage Reports</Text>
+        <Filter size={24} color="#64748B" />
+      </View>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterContainer}>
+        {filterOptions.map((option) => (
+          <TouchableOpacity
+            key={option.key}
+            style={[
+              styles.filterButton,
+              filter === option.key && styles.filterButtonActive,
+            ]}
+            onPress={() => setFilter(option.key)}
+          >
+            <Text
+              style={[
+                styles.filterButtonText,
+                filter === option.key && styles.filterButtonTextActive,
+              ]}
+            >
+              {option.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {filteredReports.map((report) => (
+        <TouchableOpacity
+          key={report.id}
+          onPress={() => handleViewIssue(report)}
+        >
+          <Card style={styles.reportCard}>
+            <View style={styles.reportHeader}>
+              <View style={styles.reportInfo}>
+                <Text style={styles.reportTitle}>{report.title}</Text>
+                <View style={styles.studentInfo}>
+                  <User size={14} color="#64748B" />
+                  <Text style={styles.studentText}>{report.studentName}</Text>
+                </View>
+                <Text style={styles.locationText}>
+                  {report.location.building} - {report.location.room}
+                </Text>
+                <Text style={styles.dateText}>
+                  {formatDate(report.createdAt)}
+                </Text>
+              </View>
+              {report.photo && (
+                <Image source={{ uri: report.photo }} style={styles.thumbnail} />
+              )}
+            </View>
+            <View style={styles.reportFooter}>
+              <StatusBadge status={report.status} />
+              {report.assignedTo && (
+                <Text style={styles.assignedText}>
+                  Assigned to: {report.assignedTo}
+                </Text>
+              )}
+            </View>
+          </Card>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    padding: 24,
+    paddingTop: 60,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    shadowColor: '#2563EB',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+    marginBottom: 20,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#1E293B',
+    letterSpacing: -0.5,
+  },
+  filterContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  filterButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: '#FEF2F2',
+    marginRight: 8,
+  },
+  filterButtonActive: {
+    backgroundColor: '#DC2626',
+  },
+  filterButtonText: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  filterButtonTextActive: {
+    color: '#FFFFFF',
+  },
+  reportCard: {
+    marginHorizontal: 20,
+    marginBottom: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#DC2626',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+  },
+  reportHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  reportInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  reportTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 6,
+    letterSpacing: 0.2,
+  },
+  studentInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+    backgroundColor: '#F8FAFC',
+    padding: 8,
+    borderRadius: 10,
+  },
+  studentText: {
+    fontSize: 14,
+    color: '#2563EB',
+    fontWeight: '500',
+    letterSpacing: 0.2,
+  },
+  locationText: {
+    fontSize: 14,
+    color: '#64748B',
+    marginBottom: 4,
+  },
+  dateText: {
+    fontSize: 12,
+    color: '#94A3B8',
+  },
+  thumbnail: {
+    width: 60,
+    height: 60,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#334155',
+  },
+  reportFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#334155',
+  },
+  assignedText: {
+    fontSize: 12,
+    color: '#94A3B8',
+    fontStyle: 'italic',
+  },
+});
