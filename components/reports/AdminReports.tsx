@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, TextInput, ActivityIndicator, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, TextInput, ActivityIndicator, Alert, Modal, RefreshControl } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/components/common/ThemeProvider';
 import { useRouter } from 'expo-router';
-import { User, MapPin, Clock, CheckCircle, Play, AlertTriangle } from 'lucide-react-native';
+import { User, MapPin, Clock, CheckCircle, Play, AlertTriangle, RefreshCw } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Card } from '@/components/common/Card';
 import { apiGet, apiPatch } from '@/services/api';
@@ -19,7 +19,7 @@ interface Report {
   photo?: string;
   adminNotes?: string;
   assignedTo?: string;
-  status: 'pending' | 'in-progress' | 'completed';
+  status: 'pending' | 'in-progress' | 'completed' | 'rejected';
   priority: 'low' | 'medium' | 'high' | 'urgent';
 }
 
@@ -27,8 +27,9 @@ export function AdminReports() {
   const router = useRouter();
   const [allReports, setAllReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'in-progress' | 'completed'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'in-progress' | 'completed' | 'rejected'>('all');
   const { theme, isDark } = useTheme();
   const [assignIds, setAssignIds] = useState<Record<string, string>>({});
 
@@ -37,12 +38,13 @@ export function AdminReports() {
   const [noteText, setNoteText] = useState('');
   const [pendingUpdate, setPendingUpdate] = useState<{
     id: string;
-    status: 'pending' | 'in-progress' | 'completed';
+    status: 'pending' | 'in-progress' | 'completed' | 'rejected';
   } | null>(null);
 
-  useEffect(() => {
-    reloadAllReports();
-  }, []);
+  // Assignment with note
+  const [assignModalVisible, setAssignModalVisible] = useState(false);
+  const [assignNote, setAssignNote] = useState('');
+  const [pendingAssignment, setPendingAssignment] = useState<{ id: string; staffId: string } | null>(null);
 
   const reloadAllReports = async () => {
     try {
@@ -61,9 +63,19 @@ export function AdminReports() {
     }
   };
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await reloadAllReports();
+    setRefreshing(false);
+  };
+
+  useEffect(() => {
+    reloadAllReports();
+  }, []);
+
   const updateReportStatus = async (
     reportId: string,
-    newStatus: 'pending' | 'in-progress' | 'completed',
+    newStatus: 'pending' | 'in-progress' | 'completed' | 'rejected',
     note?: string
   ) => {
     try {
@@ -77,19 +89,34 @@ export function AdminReports() {
     }
   };
 
-  const assignReportToStaff = async (reportId: string) => {
+  const requestAssignment = (reportId: string) => {
+    const staffId = (assignIds[reportId] || '').trim();
+    if (!staffId) {
+      Alert.alert('Assign', 'Please enter a Staff ID');
+      return;
+    }
+    setPendingAssignment({ id: reportId, staffId });
+    setAssignNote('');
+    setAssignModalVisible(true);
+  };
+
+  const assignReportToStaff = async () => {
+    if (!pendingAssignment) return;
+    
     try {
-      const staffId = (assignIds[reportId] || '').trim();
-      if (!staffId) {
-        Alert.alert('Assign', 'Please enter a Staff ID');
-        return;
-      }
+      const { id, staffId } = pendingAssignment;
       const token = await AsyncStorage.getItem('token');
-      await apiPatch(`/reports/${reportId}`, { assignedTo: staffId }, token || undefined);
-      setAllReports(prev => prev.map(r => r.id === reportId ? { ...r, assignedTo: staffId } as any : r));
+      await apiPatch(`/reports/${id}`, { 
+        assignedTo: staffId, 
+        adminNotes: assignNote.trim() || undefined 
+      }, token || undefined);
+      setAllReports(prev => prev.map(r => r.id === id ? { ...r, assignedTo: staffId } as any : r));
       // Clear input for this report to reflect applied change
-      setAssignIds(prev => ({ ...prev, [reportId]: '' }));
+      setAssignIds(prev => ({ ...prev, [id]: '' }));
       Alert.alert('Assigned', `Report assigned to Staff ID ${staffId}`);
+      setAssignModalVisible(false);
+      setPendingAssignment(null);
+      setAssignNote('');
       // Ensure UI is in sync with server (and filters)
       await reloadAllReports();
     } catch (e) {
@@ -98,19 +125,22 @@ export function AdminReports() {
     }
   };
 
-  const renderStatusIcon = (status: 'pending' | 'in-progress' | 'completed') => {
+  const renderStatusIcon = (status: 'pending' | 'in-progress' | 'completed' | 'rejected') => {
     switch (status) {
       case 'pending':
         return <Clock size={18} color="#FFFFFF" />;
       case 'in-progress':
         return <Play size={18} color="#FFFFFF" />;
       case 'completed':
-      default:
         return <CheckCircle size={18} color="#FFFFFF" />;
+      case 'rejected':
+        return <AlertTriangle size={18} color="#FFFFFF" />;
+      default:
+        return <Clock size={18} color="#FFFFFF" />;
     }
   };
 
-  const requestStatusChange = (reportId: string, newStatus: 'pending' | 'in-progress' | 'completed') => {
+  const requestStatusChange = (reportId: string, newStatus: 'pending' | 'in-progress' | 'completed' | 'rejected') => {
     setPendingUpdate({ id: reportId, status: newStatus });
     setNoteText('');
     setNoteVisible(true);
@@ -121,6 +151,7 @@ export function AdminReports() {
       case 'pending': return theme.colors.warning;
       case 'in-progress': return theme.colors.primary;
       case 'completed': return theme.colors.success;
+      case 'rejected': return theme.colors.error;
       default: return theme.colors.textSecondary;
     }
   };
@@ -140,19 +171,21 @@ export function AdminReports() {
     const v = (status || 'pending').toLowerCase();
     if (isDark) {
       switch (v) {
-        case 'in-progress': return ['#0C4A6E', '#1E3A8A'];
+        case 'in-progress': return ['#7F1D1D', '#991B1B'];
         case 'completed': return ['#064E3B', '#065F46'];
+        case 'rejected': return ['#7F1D1D', '#991B1B'];
         case 'pending':
         default:
-          return ['#451A03', '#7C2D12'];
+          return ['#450A0A', '#7F1D1D'];
       }
     } else {
       switch (v) {
-        case 'in-progress': return ['#5B8DEF', '#1E40AF'];
+        case 'in-progress': return ['#DC2626', '#EF4444'];
         case 'completed': return ['#1F8F5A', '#065F46'];
+        case 'rejected': return ['#DC2626', '#EF4444'];
         case 'pending':
         default:
-          return ['#FDBA74', '#C2410C'];
+          return ['#DC2626', '#EF4444'];
       }
     }
   };
@@ -188,7 +221,7 @@ export function AdminReports() {
 
   if (loading) {
     return (
-      <View style={[styles.centered, { backgroundColor: theme.colors.background }]}>
+      <View style={[styles.centered, { backgroundColor: '#000000' }]}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
         <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>Loading reports...</Text>
       </View>
@@ -196,32 +229,32 @@ export function AdminReports() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}> 
-      <View
-        style={[
-          styles.header,
-          {
-            backgroundColor: isDark ? theme.colors.surface : theme.colors.surface,
-            borderBottomColor: isDark ? theme.colors.border : theme.colors.border,
-            borderBottomWidth: 1,
-          },
-        ]}
-      > 
+    <View style={[styles.container, { backgroundColor: '#000000' }]}> 
+      <LinearGradient
+        colors={isDark ? ['#450A0A', '#7F1D1D'] : ['#27445D', '#27445D']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.header, { borderBottomColor: isDark ? 'rgba(255,100,100,0.2)' : theme.colors.border, borderBottomWidth: 1.5 }]}
+      >
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Text style={[styles.title, { color: isDark ? theme.colors.primary : theme.colors.text }]}>All Reports ({filteredReports.length})</Text>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <TouchableOpacity onPress={() => router.push({ pathname: '/staff' })} style={styles.staffOverviewBtn}>
+          <Text style={[styles.title, { color: '#FFFFFF' }]}>All Reports ({filteredReports.length})</Text>
+          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+            <TouchableOpacity onPress={() => router.push({ pathname: '/staff' })} style={[styles.staffOverviewBtn, { backgroundColor: '#10B981' }]}>
               <Text style={styles.addStaffText}>Staff Overview</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push({ pathname: '/create-staff' })} style={styles.addStaffBtn}>
-              <Text style={styles.addStaffText}>Add Staff</Text>
+            <TouchableOpacity 
+              onPress={onRefresh} 
+              disabled={refreshing}
+              style={{ padding: 8, backgroundColor: '#DC2626', borderRadius: 8 }}
+            >
+              <RefreshCw size={20} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
         </View>
         
         <View style={styles.filtersContainer}>
           <View style={styles.statusFilters}>
-            {(['all', 'pending', 'in-progress', 'completed'] as const).map((status) => (
+            {(['all', 'pending', 'in-progress', 'completed', 'rejected'] as const).map((status) => (
               <TouchableOpacity
                 key={status}
                 style={[
@@ -230,7 +263,7 @@ export function AdminReports() {
                     ? { backgroundColor: theme.colors.card, borderColor: theme.colors.border }
                     : { backgroundColor: 'rgba(255,255,255,0.12)', borderColor: 'rgba(255,255,255,0.25)' },
                   statusFilter === status && (isDark
-                    ? { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }
+                    ? { backgroundColor: '#DC2626', borderColor: '#DC2626' }
                     : { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary })
                 ]}
                 onPress={() => setStatusFilter(status)}
@@ -261,14 +294,19 @@ export function AdminReports() {
             />
           </View>
         </View>
-      </View>
+      </LinearGradient>
 
-        {filteredReports.length === 0 ? (
+      {filteredReports.length === 0 ? (
         <View style={styles.centered}>
           <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>No reports found.</Text>
         </View>
         ) : (
-          <ScrollView style={[styles.reportsList]}>
+          <ScrollView 
+            style={[styles.reportsList]}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#DC2626" />
+            }
+          >
             {filteredReports.map((report) => (
               <TouchableOpacity
                 key={report.id}
@@ -299,7 +337,7 @@ export function AdminReports() {
                           value={assignIds[report.id] || ''}
                           onChangeText={(val) => setAssignIds(prev => ({ ...prev, [report.id]: val }))}
                         />
-                        <TouchableOpacity style={[styles.assignBtn, { backgroundColor: '#10B981' }]} onPress={() => assignReportToStaff(report.id)}>
+                        <TouchableOpacity style={[styles.assignBtn, { backgroundColor: '#10B981' }]} onPress={() => requestAssignment(report.id)}>
                           <Text style={styles.assignBtnText}>Assign</Text>
                         </TouchableOpacity>
                       </View>
@@ -308,6 +346,17 @@ export function AdminReports() {
                   {report.assignedTo ? (
                     <Text style={{ marginTop: 6, color: 'rgba(255,255,255,0.9)', fontSize: 12 }}>Currently assigned: {report.assignedTo}</Text>
                   ) : null}
+                  
+                  {/* Reject button for pending reports - only show if not assigned */}
+                  {report.status === 'pending' && !report.assignedTo && (
+                    <TouchableOpacity 
+                      style={[styles.rejectBtn, { backgroundColor: '#DC2626', marginTop: 12 }]} 
+                      onPress={() => requestStatusChange(report.id, 'rejected')}
+                    >
+                      <AlertTriangle size={16} color="#FFFFFF" />
+                      <Text style={styles.rejectBtnText}>Reject Report</Text>
+                    </TouchableOpacity>
+                  )}
                 </LinearGradient>
               </TouchableOpacity>
             ))}
@@ -357,6 +406,49 @@ export function AdminReports() {
                 style={[styles.modalButton, { backgroundColor: '#DBEAFE', borderColor: '#93C5FD' }]}
               >
                 <Text style={[styles.modalButtonText, { color: theme.colors.primary }]}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Assignment Note Modal */}
+      <Modal
+        visible={assignModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAssignModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}> 
+            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Add a note for staff</Text>
+            <Text style={[styles.modalMessage, { color: theme.colors.textSecondary }]}>
+              Provide instructions or details for the assigned staff member (optional).
+            </Text>
+            <TextInput
+              style={[
+                styles.modalInput,
+                { borderColor: theme.colors.border, color: theme.colors.text, backgroundColor: isDark ? theme.colors.card : 'rgba(0,0,0,0.03)' },
+              ]}
+              placeholder="Enter note (optional)"
+              placeholderTextColor={theme.colors.textSecondary}
+              value={assignNote}
+              onChangeText={setAssignNote}
+              multiline
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                onPress={() => { setAssignModalVisible(false); setPendingAssignment(null); setAssignNote(''); }}
+                style={[styles.modalButton, { backgroundColor: isDark ? '#2A2A2E' : '#F1F5F9', borderColor: theme.colors.border }]}
+              >
+                <Text style={[styles.modalButtonText, { color: theme.colors.text }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                disabled={!pendingAssignment}
+                onPress={assignReportToStaff}
+                style={[styles.modalButton, { backgroundColor: '#10B981', borderColor: '#10B981' }]}
+              >
+                <Text style={[styles.modalButtonText, { color: '#FFFFFF' }]}>Assign</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -425,6 +517,9 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingTop: 60,
     borderBottomWidth: 1,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    marginBottom: 16,
   },
   title: {
     fontSize: 28,
@@ -499,6 +594,31 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   assignBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  rejectBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  rejectBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  addNoteBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  addNoteBtnText: {
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 13,

@@ -9,8 +9,22 @@ export default function TabLayout() {
   const { user } = useAuth();
   const { theme, isDark } = useTheme();
 
+  // Role-based gradient colors
+  const getGradientColors = (): [string, string] => {
+    if (user?.role === 'admin') return ['#450A0A', '#7F1D1D']; // Red for admin
+    if (user?.role === 'staff') return ['#064E3B', '#065F46']; // Green for staff
+    return ['#0F172A', '#1E293B']; // Blue for student
+  };
+
+  // Role-based active tab color
+  const getActiveTintColor = () => {
+    if (user?.role === 'admin') return '#DC2626'; // Red for admin
+    if (user?.role === 'staff') return '#10B981'; // Green for staff
+    return theme.colors.primary; // Blue for student
+  };
+
   return (
-    <View style={{ flex: 1, backgroundColor: isDark ? theme.colors.background : '#FFFFFF' }}>
+    <View style={{ flex: 1, backgroundColor: '#000000' }}>
       <Tabs
           screenOptions={{
             headerShown: false,
@@ -24,14 +38,14 @@ export default function TabLayout() {
             tabBarBackground: () => (
               isDark ? (
                 <LinearGradient
-                  colors={[ '#0F172A', '#1E293B' ]}
+                  colors={getGradientColors()}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={{ flex: 1 }}
                 />
               ) : null
             ),
-            tabBarActiveTintColor: theme.colors.primary,
+            tabBarActiveTintColor: getActiveTintColor(),
             tabBarInactiveTintColor: theme.colors.textSecondary,
             tabBarLabelStyle: {
               fontSize: 12,

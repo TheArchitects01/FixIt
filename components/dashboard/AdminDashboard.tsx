@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/components/common/ThemeProvider';
 import { useRouter } from 'expo-router';
@@ -30,24 +30,35 @@ export function AdminDashboard() {
   const router = useRouter();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const { theme, isDark } = useTheme();
+
+  const loadReports = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const resp = await apiGet('/reports', token || undefined);
+      const items = ((resp?.reports as any[]) || []).map((r: any) => ({
+        id: r.id,
+        status: r.status === 'resolved' ? 'completed' : (r.status || 'pending'),
+        priority: r.priority || 'low',
+      })) as Report[];
+      setReports(items);
+    } catch (e) {
+      console.error('Load reports error:', e);
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadReports();
+    setRefreshing(false);
+  };
 
   useEffect(() => {
     (async () => {
-      try {
-        const token = await AsyncStorage.getItem('token');
-        const resp = await apiGet('/reports', token || undefined);
-        const items = ((resp?.reports as any[]) || []).map((r: any) => ({
-          id: r.id,
-          status: r.status === 'resolved' ? 'completed' : (r.status || 'pending'),
-          priority: r.priority || 'low',
-        })) as Report[];
-        setReports(items);
-      } catch (e) {
-        console.error('Load reports error:', e);
-      } finally {
-        setLoading(false);
-      }
+      setLoading(true);
+      await loadReports();
+      setLoading(false);
     })();
   }, []);
 
@@ -65,20 +76,25 @@ export function AdminDashboard() {
   // Removed Add Admin navigation from dashboard
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}> 
+    <ScrollView 
+      style={[styles.container, { backgroundColor: '#000000' }]}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#DC2626" />
+      }
+    > 
       {isDark ? (
         <LinearGradient
-          colors={["#0F172A", "#1E293B"]}
+          colors={["#450A0A", "#7F1D1D"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={[
             styles.header,
-            { shadowColor: theme.colors.primary, borderColor: 'rgba(255,255,255,0.08)', borderWidth: 1, paddingTop: 32, marginBottom: 16 },
+            { shadowColor: '#DC2626', borderColor: 'rgba(255,100,100,0.2)', borderWidth: 1.5, paddingTop: 32, marginBottom: 16 },
           ]}
         >
-          <Text style={{ ...styles.welcomeText, color: '#E5EDFF' }}>Admin Dashboard</Text>
+          <Text style={{ ...styles.welcomeText, color: '#FEE2E2' }}>Admin Dashboard</Text>
           <Text style={[styles.nameText, { color: '#FFFFFF' }]}>{user?.name}</Text>
-          <Text style={[styles.subtitleText, { color: '#BFD2FF' }]}>Staff ID: {user?.staffId}</Text>
+          <Text style={[styles.subtitleText, { color: '#FECACA' }]}>Staff ID: {user?.staffId}</Text>
         </LinearGradient>
       ) : (
         <View style={{ ...styles.header, backgroundColor: '#27445D', shadowColor: '#27445D', borderColor: '#1F3A52', borderWidth: 1, paddingTop: 32, marginBottom: 16 }}>
@@ -91,16 +107,16 @@ export function AdminDashboard() {
       <View style={[styles.statsGrid, isDark && { gap: 8, marginBottom: 16 }, !isDark && { gap: 8, marginBottom: 16 }]}>
         {isDark ? (
           <LinearGradient
-            colors={["#0F172A", "#1E293B"]}
+            colors={["#450A0A", "#7F1D1D"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={[styles.statCard, { borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', shadowColor: theme.colors.primary, padding: 16 }]}
+            style={[styles.statCard, { borderWidth: 1.5, borderColor: 'rgba(255,100,100,0.2)', shadowColor: '#DC2626', padding: 16 }]}
           >
             <View style={{ ...styles.statRow, backgroundColor: 'rgba(255,255,255,0.08)' }}>
               <FileText size={20} color={theme.colors.primary} />
               <Text style={[styles.statNumber, { color: '#FFFFFF' }]}>{loading ? '...' : stats.totalReports}</Text>
             </View>
-            <Text style={[styles.statLabel, { color: '#BFD2FF' }]}>Total Reports</Text>
+            <Text style={[styles.statLabel, { color: '#FECACA' }]}>Total Reports</Text>
           </LinearGradient>
         ) : (
           <Card style={{ ...styles.statCard, backgroundColor: '#27445D', shadowColor: '#27445D', borderColor: '#1F3A52', padding: 16 }}>
@@ -114,16 +130,16 @@ export function AdminDashboard() {
 
         {isDark ? (
           <LinearGradient
-            colors={["#0F172A", "#1E293B"]}
+            colors={["#450A0A", "#7F1D1D"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={[styles.statCard, { borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', shadowColor: theme.colors.primary, padding: 16 }]}
+            style={[styles.statCard, { borderWidth: 1.5, borderColor: 'rgba(255,100,100,0.2)', shadowColor: '#DC2626', padding: 16 }]}
           >
             <View style={{ ...styles.statRow, backgroundColor: 'rgba(255,255,255,0.08)' }}>
               <Clock size={20} color={theme.colors.warning} />
               <Text style={[styles.statNumber, { color: '#FFFFFF' }]}>{loading ? '...' : stats.pending}</Text>
             </View>
-            <Text style={[styles.statLabel, { color: '#BFD2FF' }]}>Pending</Text>
+            <Text style={[styles.statLabel, { color: '#FECACA' }]}>Pending</Text>
           </LinearGradient>
         ) : (
           <Card style={{ ...styles.statCard, backgroundColor: '#27445D', shadowColor: '#27445D', borderColor: '#1F3A52', padding: 16 }}>
@@ -137,16 +153,16 @@ export function AdminDashboard() {
 
         {isDark ? (
           <LinearGradient
-            colors={["#0F172A", "#1E293B"]}
+            colors={["#450A0A", "#7F1D1D"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={[styles.statCard, { borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', shadowColor: theme.colors.primary, padding: 16 }]}
+            style={[styles.statCard, { borderWidth: 1.5, borderColor: 'rgba(255,100,100,0.2)', shadowColor: '#DC2626', padding: 16 }]}
           >
             <View style={{ ...styles.statRow, backgroundColor: 'rgba(255,255,255,0.08)' }}>
               <FileText size={20} color={theme.colors.primary} />
               <Text style={[styles.statNumber, { color: '#FFFFFF' }]}>{loading ? '...' : stats.inProgress}</Text>
             </View>
-            <Text style={[styles.statLabel, { color: '#BFD2FF' }]}>In Progress</Text>
+            <Text style={[styles.statLabel, { color: '#FECACA' }]}>In Progress</Text>
           </LinearGradient>
         ) : (
           <Card style={{ ...styles.statCard, backgroundColor: '#27445D', shadowColor: '#27445D', borderColor: '#1F3A52', padding: 16 }}>
@@ -160,16 +176,16 @@ export function AdminDashboard() {
 
         {isDark ? (
           <LinearGradient
-            colors={["#0F172A", "#1E293B"]}
+            colors={["#450A0A", "#7F1D1D"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={[styles.statCard, { borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', shadowColor: theme.colors.primary, padding: 16 }]}
+            style={[styles.statCard, { borderWidth: 1.5, borderColor: 'rgba(255,100,100,0.2)', shadowColor: '#DC2626', padding: 16 }]}
           >
             <View style={{ ...styles.statRow, backgroundColor: 'rgba(255,255,255,0.08)' }}>
               <CheckCircle size={20} color={theme.colors.success} />
               <Text style={[styles.statNumber, { color: '#FFFFFF' }]}>{loading ? '...' : stats.resolved}</Text>
             </View>
-            <Text style={[styles.statLabel, { color: '#BFD2FF' }]}>Resolved</Text>
+            <Text style={[styles.statLabel, { color: '#FECACA' }]}>Resolved</Text>
           </LinearGradient>
         ) : (
           <Card style={{ ...styles.statCard, backgroundColor: '#27445D', shadowColor: '#27445D', borderColor: '#1F3A52', padding: 16 }}>
@@ -183,16 +199,16 @@ export function AdminDashboard() {
 
         {isDark ? (
           <LinearGradient
-            colors={["#0F172A", "#1E293B"]}
+            colors={["#450A0A", "#7F1D1D"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={[styles.statCard, { borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', shadowColor: theme.colors.primary, padding: 16 }]}
+            style={[styles.statCard, { borderWidth: 1.5, borderColor: 'rgba(255,100,100,0.2)', shadowColor: '#DC2626', padding: 16 }]}
           >
             <View style={{ ...styles.statRow, backgroundColor: 'rgba(255,255,255,0.08)' }}>
               <AlertTriangle size={20} color={theme.colors.error} />
               <Text style={[styles.statNumber, { color: '#FFFFFF' }]}>{loading ? '...' : stats.urgent}</Text>
             </View>
-            <Text style={[styles.statLabel, { color: '#BFD2FF' }]}>Urgent Issues</Text>
+            <Text style={[styles.statLabel, { color: '#FECACA' }]}>Urgent Issues</Text>
           </LinearGradient>
         ) : (
           <Card style={{ ...styles.statCard, backgroundColor: '#27445D', shadowColor: '#27445D', borderColor: '#1F3A52', padding: 16 }}>
@@ -207,13 +223,13 @@ export function AdminDashboard() {
 
       <View style={{ marginHorizontal: 24, marginTop: 8, marginBottom: 24, flexDirection: 'row', gap: 12 }}>
         <TouchableOpacity 
-          style={[styles.manageButton, { backgroundColor: theme.colors.primary, flex: 1 }]} 
+          style={[styles.manageButton, { backgroundColor: '#DC2626', flex: 1 }]} 
           onPress={handleManageReports}
         >
           <Text style={styles.manageButtonText}>Manage Reports</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 

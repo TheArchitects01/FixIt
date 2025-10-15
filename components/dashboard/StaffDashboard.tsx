@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, RefreshControl } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/components/common/ThemeProvider';
 import { useRouter } from 'expo-router';
@@ -18,24 +18,35 @@ export default function StaffDashboard() {
   const { theme, isDark } = useTheme();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadReports = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const resp = await apiGet('/reports/assigned-to-me', token || undefined);
+      const items = ((resp?.reports as any[]) || []).map((r: any) => ({
+        id: r.id,
+        status: r.status === 'resolved' ? 'completed' : (r.status || 'pending'),
+        priority: r.priority || 'low',
+      })) as Report[];
+      setReports(items);
+    } catch (e) {
+      setReports([]);
+      console.error('Load assigned reports error:', e);
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadReports();
+    setRefreshing(false);
+  };
 
   useEffect(() => {
     (async () => {
-      try {
-        const token = await AsyncStorage.getItem('token');
-        const resp = await apiGet('/reports/assigned-to-me', token || undefined);
-        const items = ((resp?.reports as any[]) || []).map((r: any) => ({
-          id: r.id,
-          status: r.status === 'resolved' ? 'completed' : (r.status || 'pending'),
-          priority: r.priority || 'low',
-        })) as Report[];
-        setReports(items);
-      } catch (e) {
-        setReports([]);
-        console.error('Load assigned reports error:', e);
-      } finally {
-        setLoading(false);
-      }
+      setLoading(true);
+      await loadReports();
+      setLoading(false);
     })();
   }, []);
 
@@ -51,52 +62,77 @@ export default function StaffDashboard() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}> 
+    <ScrollView 
+      style={[styles.container, { backgroundColor: '#000000' }]}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#10B981" />
+      }
+    > 
       <LinearGradient
-        colors={isDark ? ['#0F172A', '#1E293B'] : ['#27445D', '#27445D']}
+        colors={isDark ? ['#064E3B', '#065F46'] : ['#27445D', '#27445D']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={[styles.header, { borderColor: theme.colors.border }]}
+        style={[styles.header, { borderColor: 'rgba(100,255,150,0.2)', borderWidth: 1.5 }]}
       >
         <Text style={[styles.title, { color: '#FFFFFF' }]}>Staff Dashboard</Text>
-        <Text style={[styles.subtitle, { color: '#EAF2FF' }]}>Your assigned jobs at a glance</Text>
+        <Text style={[styles.subtitle, { color: '#D1FAE5' }]}>Your assigned jobs at a glance</Text>
       </LinearGradient>
 
       <View style={styles.grid}>
-        <View style={[styles.statCard, { backgroundColor: isDark ? theme.colors.card : '#27445D', borderColor: isDark ? theme.colors.border : '#1F3A52' }]}>
+        <LinearGradient
+          colors={isDark ? ['#064E3B', '#065F46'] : ['#27445D', '#27445D']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.statCard, { borderColor: isDark ? 'rgba(100,255,150,0.2)' : '#1F3A52', borderWidth: 1.5 }]}
+        >
           <View style={styles.statRow}>
             <FileText size={20} color={theme.colors.primary} />
             <Text style={[styles.statNumber, { color: '#FFFFFF' }]}>{loading ? '...' : stats.total}</Text>
           </View>
-          <Text style={[styles.statLabel, { color: isDark ? theme.colors.textSecondary : '#E0ECFF' }]}>Assigned</Text>
-        </View>
-        <View style={[styles.statCard, { backgroundColor: isDark ? theme.colors.card : '#27445D', borderColor: isDark ? theme.colors.border : '#1F3A52' }]}>
+          <Text style={[styles.statLabel, { color: isDark ? '#D1FAE5' : '#E0ECFF' }]}>Assigned</Text>
+        </LinearGradient>
+        <LinearGradient
+          colors={isDark ? ['#064E3B', '#065F46'] : ['#27445D', '#27445D']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.statCard, { borderColor: isDark ? 'rgba(100,255,150,0.2)' : '#1F3A52', borderWidth: 1.5 }]}
+        >
           <View style={styles.statRow}>
             <Clock size={20} color={theme.colors.warning} />
             <Text style={[styles.statNumber, { color: '#FFFFFF' }]}>{loading ? '...' : stats.pending}</Text>
           </View>
-          <Text style={[styles.statLabel, { color: isDark ? theme.colors.textSecondary : '#E0ECFF' }]}>Pending</Text>
-        </View>
-        <View style={[styles.statCard, { backgroundColor: isDark ? theme.colors.card : '#27445D', borderColor: isDark ? theme.colors.border : '#1F3A52' }]}>
+          <Text style={[styles.statLabel, { color: isDark ? '#D1FAE5' : '#E0ECFF' }]}>Pending</Text>
+        </LinearGradient>
+        <LinearGradient
+          colors={isDark ? ['#064E3B', '#065F46'] : ['#27445D', '#27445D']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.statCard, { borderColor: isDark ? 'rgba(100,255,150,0.2)' : '#1F3A52', borderWidth: 1.5 }]}
+        >
           <View style={styles.statRow}>
             <Play size={20} color={theme.colors.primary} />
             <Text style={[styles.statNumber, { color: '#FFFFFF' }]}>{loading ? '...' : stats.inProgress}</Text>
           </View>
-          <Text style={[styles.statLabel, { color: isDark ? theme.colors.textSecondary : '#E0ECFF' }]}>In Progress</Text>
-        </View>
-        <View style={[styles.statCard, { backgroundColor: isDark ? theme.colors.card : '#27445D', borderColor: isDark ? theme.colors.border : '#1F3A52' }]}>
+          <Text style={[styles.statLabel, { color: isDark ? '#D1FAE5' : '#E0ECFF' }]}>In Progress</Text>
+        </LinearGradient>
+        <LinearGradient
+          colors={isDark ? ['#064E3B', '#065F46'] : ['#27445D', '#27445D']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.statCard, { borderColor: isDark ? 'rgba(100,255,150,0.2)' : '#1F3A52', borderWidth: 1.5 }]}
+        >
           <View style={styles.statRow}>
             <CheckCircle size={20} color={theme.colors.success} />
             <Text style={[styles.statNumber, { color: '#FFFFFF' }]}>{loading ? '...' : stats.completed}</Text>
           </View>
-          <Text style={[styles.statLabel, { color: isDark ? theme.colors.textSecondary : '#E0ECFF' }]}>Completed</Text>
-        </View>
+          <Text style={[styles.statLabel, { color: isDark ? '#D1FAE5' : '#E0ECFF' }]}>Completed</Text>
+        </LinearGradient>
       </View>
 
-      <TouchableOpacity style={[styles.button, { backgroundColor: theme.colors.primary }]} onPress={goToMyJobs}>
+      <TouchableOpacity style={[styles.button, { backgroundColor: '#10B981' }]} onPress={goToMyJobs}>
         <Text style={styles.buttonText}>View My Jobs</Text>
       </TouchableOpacity>
-    </View>
+    </ScrollView>
   );
 }
 

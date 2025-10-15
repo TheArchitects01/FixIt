@@ -76,7 +76,7 @@ export default function StudentDashboard() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <View style={[styles.container, { backgroundColor: '#000000' }]}>
       <LinearGradient
         colors={isDark ? ['#0F172A', '#1E293B'] : ['#27445D', '#27445D']}
         start={{ x: 0, y: 0 }}
@@ -97,7 +97,7 @@ export default function StudentDashboard() {
           end={{ x: 1, y: 1 }}
           style={[
             styles.statsCard,
-            { borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', shadowColor: '#000' },
+            { borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.15)', shadowColor: '#000' },
           ]}
         >
           <Text style={[styles.statsNumber, { color: '#FFFFFF' }]}>{loading ? '...' : activeIssues.length}</Text>
@@ -126,7 +126,7 @@ export default function StudentDashboard() {
             colors={['#0F172A', '#1E293B']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={[styles.actionButton, { borderColor: 'rgba(255,255,255,0.08)', shadowColor: '#000', borderWidth: 1 }]}
+            style={[styles.actionButton, { borderColor: 'rgba(255,255,255,0.15)', shadowColor: '#000', borderWidth: 1.5 }]}
           >
             <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }} onPress={handleReportNewIssue}>
               <LinearGradient
@@ -159,7 +159,7 @@ export default function StudentDashboard() {
             colors={['#0F172A', '#1E293B']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={[styles.actionButton, { borderColor: 'rgba(255,255,255,0.08)', shadowColor: '#000', borderWidth: 1 }]}
+            style={[styles.actionButton, { borderColor: 'rgba(255,255,255,0.15)', shadowColor: '#000', borderWidth: 1.5 }]}
           >
             <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }} onPress={handleViewMyReports}>
               <LinearGradient
@@ -192,7 +192,7 @@ export default function StudentDashboard() {
             colors={['#0F172A', '#1E293B']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={[styles.actionButton, { borderColor: 'rgba(255,255,255,0.08)', shadowColor: '#000', borderWidth: 1 }]}
+            style={[styles.actionButton, { borderColor: 'rgba(255,255,255,0.15)', shadowColor: '#000', borderWidth: 1.5 }]}
           >
             <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }} onPress={handleViewCampusReports}>
               <LinearGradient

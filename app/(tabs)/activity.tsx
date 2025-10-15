@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Clock, FileText, CheckCircle, Play, AlertTriangle } from 'lucide-react-native';
 import { Card } from '@/components/common/Card';
@@ -23,7 +23,28 @@ export default function ActivityScreen() {
   const { theme, isDark } = useTheme();
   const [activityLog, setActivityLog] = useState<ActivityEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const isAdmin = user?.role === 'admin';
+  const isStaff = user?.role === 'staff';
+
+  // Role-based gradient colors
+  const getGradientColors = (): [string, string] => {
+    if (user?.role === 'admin') return ['#450A0A', '#7F1D1D'];
+    if (user?.role === 'staff') return ['#064E3B', '#065F46'];
+    return ['#0F172A', '#1E293B'];
+  };
+
+  const getAccentColors = (): [string, string] => {
+    if (user?.role === 'admin') return ['#FCA5A5', '#DC2626'];
+    if (user?.role === 'staff') return ['#6EE7B7', '#10B981'];
+    return ['#93C5FD', '#3B82F6'];
+  };
+
+  const getTextColor = () => {
+    if (user?.role === 'admin') return '#FECACA';
+    if (user?.role === 'staff') return '#D1FAE5';
+    return '#E5EDFF';
+  };
 
   const loadActivity = useCallback(async () => {
     if (!user) return;
@@ -56,6 +77,12 @@ export default function ActivityScreen() {
     }
   }, [user]);
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadActivity();
+    setRefreshing(false);
+  };
+
   useFocusEffect(
     useCallback(() => {
       loadActivity();
@@ -66,28 +93,53 @@ export default function ActivityScreen() {
     const activities: ActivityEntry[] = [];
 
     reports.forEach(report => {
-      // Report submission activity
-      activities.push({
-        id: `submit-${report.id}`,
-        action: userRole === 'admin' 
-          ? `New report submitted by Student ${report.studentId}`
-          : 'You submitted a new report',
-        timestamp: report.createdAt,
-        issueTitle: report.title,
-        priority: report.priority,
-      });
+      // Report submission activity - only for admin and student
+      if (userRole === 'admin') {
+        activities.push({
+          id: `submit-${report.id}`,
+          action: `New report submitted by Student ${report.studentId}`,
+          timestamp: report.createdAt,
+          issueTitle: report.title,
+          priority: report.priority,
+        });
+      } else if (userRole === 'student') {
+        activities.push({
+          id: `submit-${report.id}`,
+          action: 'You submitted a new report',
+          timestamp: report.createdAt,
+          issueTitle: report.title,
+          priority: report.priority,
+        });
+      } else if (userRole === 'staff' && report.assignedTo) {
+        // Staff sees when they were assigned
+        activities.push({
+          id: `assigned-${report.id}`,
+          action: `You were assigned to report: ${report.title}`,
+          timestamp: report.createdAt,
+          issueTitle: report.title,
+          priority: report.priority,
+        });
+      }
 
       // Status update activities
       if (report.status !== 'pending' && report.updatedAt && report.updatedAt !== report.createdAt) {
-        activities.push({
-          id: `status-${report.id}`,
-          action: userRole === 'admin'
-            ? `Report status updated to ${report.status}`
-            : `Report status updated to ${report.status}`,
-          timestamp: report.updatedAt,
-          issueTitle: report.title,
-          status: report.status,
-        });
+        if (userRole === 'staff') {
+          activities.push({
+            id: `status-${report.id}`,
+            action: `You updated report status to ${report.status}`,
+            timestamp: report.updatedAt,
+            issueTitle: report.title,
+            status: report.status,
+          });
+        } else {
+          activities.push({
+            id: `status-${report.id}`,
+            action: `Report status updated to ${report.status}`,
+            timestamp: report.updatedAt,
+            issueTitle: report.title,
+            status: report.status,
+          });
+        }
       }
 
       // Admin receives staff updates (notes timeline)
@@ -97,6 +149,30 @@ export default function ActivityScreen() {
             activities.push({
               id: `note-${report.id}-${idx}-${n.createdAt || ''}`,
               action: `${n.byName || 'Staff'} added a note${n.statusAtTime ? ` (${n.statusAtTime})` : ''}: ${n.text || ''}`,
+              timestamp: n.createdAt || report.updatedAt || report.createdAt,
+              issueTitle: report.title,
+              status: n.statusAtTime === 'resolved' ? 'completed' : (n.statusAtTime || undefined),
+            });
+          }
+        });
+      }
+
+      // Staff sees admin notes and their own notes on their assigned reports
+      if (userRole === 'staff' && Array.isArray(report.notes) && report.notes.length > 0) {
+        report.notes.forEach((n: any, idx: number) => {
+          if (n?.byRole === 'admin') {
+            activities.push({
+              id: `admin-note-${report.id}-${idx}-${n.createdAt || ''}`,
+              action: `Admin added a note: ${n.text || ''}`,
+              timestamp: n.createdAt || report.updatedAt || report.createdAt,
+              issueTitle: report.title,
+              status: n.statusAtTime === 'resolved' ? 'completed' : (n.statusAtTime || undefined),
+            });
+          } else if (n?.byRole === 'staff') {
+            // Show staff their own notes
+            activities.push({
+              id: `staff-note-${report.id}-${idx}-${n.createdAt || ''}`,
+              action: `You added a note${n.statusAtTime ? ` (${n.statusAtTime})` : ''}: ${n.text || ''}`,
               timestamp: n.createdAt || report.updatedAt || report.createdAt,
               issueTitle: report.title,
               status: n.statusAtTime === 'resolved' ? 'completed' : (n.statusAtTime || undefined),
@@ -140,7 +216,7 @@ export default function ActivityScreen() {
 
   if (loading) {
     return (
-      <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <ScrollView style={[styles.container, { backgroundColor: '#000000' }]}>
         <View style={[styles.header, { borderBottomColor: isDark ? theme.colors.border : '#1F3A52' }]}>
           <Text style={[styles.title, { color: isDark ? theme.colors.text : '#FFFFFF' }]}>
             {isAdmin ? 'Notifications' : 'Activity'}
@@ -153,16 +229,25 @@ export default function ActivityScreen() {
   }
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <ScrollView 
+      style={[styles.container, { backgroundColor: '#000000' }]}
+      refreshControl={
+        <RefreshControl 
+          refreshing={refreshing} 
+          onRefresh={onRefresh} 
+          tintColor={user?.role === 'admin' ? '#DC2626' : user?.role === 'staff' ? '#10B981' : '#3B82F6'} 
+        />
+      }
+    >
       {isDark ? (
         <LinearGradient
-          colors={['#0F172A', '#1E293B']}
+          colors={getGradientColors()}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.headerGradient}
         >
           <Text style={[styles.title, { color: '#FFFFFF' }]}>{isAdmin ? 'Notifications' : 'Activity'}</Text>
-          <Text style={[styles.subtitle, { color: '#E5EDFF' }]}>
+          <Text style={[styles.subtitle, { color: getTextColor() }]}>
             {isAdmin ? 'Manage all updates and activities' : 'Your recent actions and updates'}
           </Text>
         </LinearGradient>
@@ -178,14 +263,14 @@ export default function ActivityScreen() {
       {activityLog.length === 0 ? (
         isDark ? (
           <LinearGradient
-            colors={['#0F172A', '#1E293B']}
+            colors={getGradientColors()}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={[styles.emptyCard, { borderRadius: 16 }]}
           >
             <Clock size={48} color={'#FFFFFF'} />
             <Text style={[styles.emptyText, { color: '#FFFFFF' }]}>No activity yet</Text>
-            <Text style={[styles.emptySubtext, { color: '#EAF2FF' }]}>Your actions and report updates will appear here</Text>
+            <Text style={[styles.emptySubtext, { color: getTextColor() }]}>Your actions and report updates will appear here</Text>
           </LinearGradient>
         ) : (
           <View
@@ -216,13 +301,13 @@ export default function ActivityScreen() {
             <View key={entry.id} style={[styles.activityCardWrapper]}>
               {isDark ? (
                 <LinearGradient
-                  colors={['#0F172A', '#1E293B']}
+                  colors={getGradientColors()}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={[styles.activityCard, { borderColor: theme.colors.border }]}
                 >
                   <LinearGradient
-                    colors={isDark ? ['#93C5FD', '#3B82F6'] : ['#27445D', '#27445D']}
+                    colors={isDark ? getAccentColors() : ['#27445D', '#27445D']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 0, y: 1 }}
                     style={styles.accentStrip}

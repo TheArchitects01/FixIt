@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Image,
+  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Button } from '@/components/common/Button';
@@ -26,6 +28,28 @@ export default function LoginScreen() {
   const { isDark, toggleTheme, theme } = useTheme();
   
   const themeColor = selectedRole === 'admin' ? '#DC2626' : (selectedRole === 'staff' ? '#10B981' : '#2563EB');
+  
+  // Blinking glow animation
+  const glowAnim = useRef(new Animated.Value(0.8)).current;
+
+  useEffect(() => {
+    const blinkAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: false,
+        }),
+        Animated.timing(glowAnim, {
+          toValue: 0.8,
+          duration: 1000,
+          useNativeDriver: false,
+        }),
+      ])
+    );
+    blinkAnimation.start();
+    return () => blinkAnimation.stop();
+  }, []);
 
   const handleLogin = async () => {
     if (!id || !password) {
@@ -54,7 +78,7 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      style={[styles.container, { backgroundColor: '#000000' }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={styles.content}>
@@ -75,8 +99,52 @@ export default function LoginScreen() {
         </TouchableOpacity>
 
         <View style={styles.header}>
-          <Text style={[styles.logo, { color: themeColor }]}>FixIt</Text>
-          <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>University Maintenance Reporting</Text>
+          <Animated.View style={[
+            styles.glowWrapperOuter,
+            {
+              backgroundColor: themeColor,
+              opacity: glowAnim.interpolate({
+                inputRange: [0.8, 1],
+                outputRange: [0.1, 0.2],
+              }),
+            }
+          ]} />
+          <Animated.View style={[
+            styles.glowWrapperMiddle,
+            {
+              backgroundColor: themeColor,
+              opacity: glowAnim.interpolate({
+                inputRange: [0.8, 1],
+                outputRange: [0.2, 0.4],
+              }),
+            }
+          ]} />
+          <Animated.View style={[
+            styles.glowWrapper,
+            {
+              backgroundColor: themeColor,
+              opacity: glowAnim.interpolate({
+                inputRange: [0.8, 1],
+                outputRange: [0.3, 0.6],
+              }),
+            }
+          ]} />
+          <Animated.View style={[
+            styles.logoContainer,
+            { 
+              shadowColor: themeColor,
+              shadowOpacity: glowAnim,
+            }
+          ]}>
+            <Image 
+              source={require('@/assets/images/icon.png')} 
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+          </Animated.View>
+          <View style={styles.subtitleContainer}>
+            <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>University Maintenance Reporting</Text>
+          </View>
         </View>
 
         <View style={styles.roleSelector}>
@@ -217,7 +285,9 @@ export default function LoginScreen() {
               }}
               textStyle={{ color: themeColor }}
             />
-          ) : null}
+          ) : (
+            <View style={styles.registerButton} />
+          )}
         </View>
 
         <Text style={[styles.demo, { color: theme.colors.textSecondary }]}>
@@ -231,7 +301,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#000000',
   },
   content: {
     flex: 1,
@@ -252,12 +322,50 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 40,
   },
-  logo: {
-    fontSize: 56,
-    fontWeight: 'bold',
-    color: '#2563EB',
-    marginBottom: 12,
-    letterSpacing: -1,
+  glowWrapperOuter: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 38,
+    top: -38,
+  },
+  glowWrapperMiddle: {
+    position: 'absolute',
+    width: 150,
+    height: 150,
+    borderRadius: 32,
+    top: -23,
+  },
+  glowWrapper: {
+    position: 'absolute',
+    width: 130,
+    height: 130,
+    borderRadius: 28,
+    top: -13,
+  },
+  logoContainer: {
+    width: 104,
+    height: 104,
+    borderRadius: 22,
+    marginBottom: 24,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    shadowOffset: {
+      width: 0,
+      height: 0,
+    },
+    shadowRadius: 100,
+    elevation: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 20,
+  },
+  subtitleContainer: {
+    marginTop: 20,
   },
   subtitle: {
     fontSize: 18,
@@ -325,6 +433,7 @@ const styles = StyleSheet.create({
   },
   registerButton: {
     marginTop: 12,
+    height: 48,
     borderColor: '#2563EB',
   },
   demo: {

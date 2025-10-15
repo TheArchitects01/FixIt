@@ -123,7 +123,7 @@ export function StudentReports() {
 
   if (loading) {
     return (
-      <View style={[styles.centered, { backgroundColor: theme.colors.background }]}>
+      <View style={[styles.centered, { backgroundColor: '#000000' }]}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
         <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>Loading your reports...</Text>
       </View>
@@ -131,7 +131,7 @@ export function StudentReports() {
   }
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <ScrollView style={[styles.container, { backgroundColor: '#000000' }]}>
       {isDark ? (
         <LinearGradient
           colors={['#0F172A', '#1E293B']}

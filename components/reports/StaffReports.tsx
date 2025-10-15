@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, TextInput, Alert, RefreshControl } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/components/common/ThemeProvider';
+import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiGet, apiPatch } from '@/services/api';
-import { Clock, Play, CheckCircle } from 'lucide-react-native';
+import { Clock, Play, CheckCircle, RefreshCw } from 'lucide-react-native';
 
 interface Report {
   id: string;
@@ -16,19 +17,15 @@ interface Report {
 
 export function StaffReports() {
   const { theme, isDark } = useTheme();
+  const router = useRouter();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [noteVisible, setNoteVisible] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [pendingUpdate, setPendingUpdate] = useState<{ id: string; status: 'pending' | 'in-progress' | 'completed' } | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'in-progress' | 'completed'>('all');
   const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    (async () => {
-      await loadAssigned();
-    })();
-  }, []);
 
   const loadAssigned = async () => {
     setLoading(true);
@@ -51,19 +48,31 @@ export function StaffReports() {
     }
   };
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadAssigned();
+    setRefreshing(false);
+  };
+
+  useEffect(() => {
+    (async () => {
+      await loadAssigned();
+    })();
+  }, []);
+
   const getCardGradient = (status?: string): [string, string] => {
     const s = (status || 'pending').toLowerCase();
     if (isDark) {
       switch (s) {
-        case 'in-progress': return ['#0C4A6E', '#1E3A8A'];
+        case 'in-progress': return ['#065F46', '#047857'];
         case 'completed': return ['#064E3B', '#065F46'];
-        default: return ['#451A03', '#7C2D12'];
+        default: return ['#064E3B', '#065F46'];
       }
     }
     switch (s) {
-      case 'in-progress': return ['#5B8DEF', '#1E40AF'];
+      case 'in-progress': return ['#10B981', '#34D399'];
       case 'completed': return ['#1F8F5A', '#065F46'];
-      default: return ['#FDBA74', '#C2410C'];
+      default: return ['#10B981', '#34D399'];
     }
   };
 
@@ -102,7 +111,7 @@ export function StaffReports() {
 
   if (loading) {
     return (
-      <View style={[styles.centered, { backgroundColor: theme.colors.background }]}>
+      <View style={[styles.centered, { backgroundColor: '#000000' }]}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
         <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>Loading my jobs...</Text>
       </View>
@@ -110,104 +119,85 @@ export function StaffReports() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}> 
+    <View style={[styles.container, { backgroundColor: '#000000' }]}> 
       <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
-        <Text style={[styles.title, { color: isDark ? theme.colors.primary : theme.colors.text }]}>My Jobs ({filtered.length}/{reports.length})</Text>
-      </View>
-      <View style={{ paddingHorizontal: 16, marginTop: 8, marginBottom: 4 }}>
-        <View style={styles.filtersRow}>
-          {(['all','pending','in-progress','completed'] as const).map(s => (
-            <TouchableOpacity
-              key={s}
-              style={[
-                styles.filterBtn,
-                isDark
-                  ? { backgroundColor: theme.colors.card, borderColor: theme.colors.border }
-                  : { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-                statusFilter === s && { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }
-              ]}
-              onPress={() => setStatusFilter(s)}
-            >
-              <Text style={[
-                styles.filterText,
-                { color: isDark ? theme.colors.textSecondary : theme.colors.textSecondary },
-                statusFilter === s && { color: '#FFFFFF' }
-              ]}>
-                {s === 'all' ? 'All' : s.replace('-', ' ').replace(/^\w/, (c) => c.toUpperCase())}
-              </Text>
-            </TouchableOpacity>
-          ))}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text style={[styles.title, { color: isDark ? theme.colors.primary : theme.colors.text }]}>My Jobs ({filtered.length}/{reports.length})</Text>
+          <TouchableOpacity 
+            onPress={onRefresh} 
+            disabled={refreshing}
+            style={{ padding: 8, backgroundColor: '#10B981', borderRadius: 8 }}
+          >
+            <RefreshCw size={20} color="#FFFFFF" />
+          </TouchableOpacity>
         </View>
       </View>
-      <ScrollView style={{ padding: 16 }}>
+      <ScrollView 
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 20 }}
+        showsVerticalScrollIndicator={false}
+        alwaysBounceVertical={true}
+        bounces={true}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#10B981" />
+        }
+      >
+        <View style={{ paddingHorizontal: 16, marginTop: 8, marginBottom: 4 }}>
+          <View style={styles.filtersRow}>
+            {(['all','pending','in-progress','completed'] as const).map(s => (
+              <TouchableOpacity
+                key={s}
+                style={[
+                  styles.filterBtn,
+                  isDark
+                    ? { backgroundColor: theme.colors.card, borderColor: theme.colors.border }
+                    : { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+                  statusFilter === s && { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }
+                ]}
+                onPress={() => setStatusFilter(s)}
+              >
+                <Text style={[
+                  styles.filterText,
+                  { color: isDark ? theme.colors.textSecondary : theme.colors.textSecondary },
+                  statusFilter === s && { color: '#FFFFFF' }
+                ]}>
+                  {s === 'all' ? 'All' : s.replace('-', ' ').replace(/^\w/, (c) => c.toUpperCase())}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+        <View style={{ padding: 16 }}>
         {filtered.length === 0 ? (
           <View style={styles.centered}><Text style={{ color: theme.colors.textSecondary }}>No jobs assigned.</Text></View>
         ) : filtered.map(report => (
-          <LinearGradient
+          <TouchableOpacity
             key={report.id}
-            colors={getCardGradient(report.status)}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[styles.card, { borderColor: isDark ? 'rgba(255,255,255,0.15)' : theme.colors.border }]}
+            activeOpacity={0.7}
+            onPress={() => router.push({ pathname: '/reports/[id]', params: { id: report.id } })}
           >
-            <View style={styles.cardHeader}>
-              {renderStatusIcon(report.status)}
-              <Text style={[styles.cardTitle, { color: '#FFFFFF' }]}>{report.title}</Text>
-            </View>
-            {Array.isArray(report.notes) && report.notes.length > 0 && (
-              <View style={{ marginBottom: 8 }}>
-                <TouchableOpacity onPress={() => setExpandedNotes(prev => ({ ...prev, [report.id]: !prev[report.id] }))}>
-                  <Text style={{ color: '#E7F8F1', fontWeight: '700', fontSize: 12 }}>
-                    Notes ({report.notes.length}) {expandedNotes[report.id] ? '▲' : '▼'}
-                  </Text>
-                </TouchableOpacity>
-                {expandedNotes[report.id] && (
-                  <View style={{ marginTop: 6, gap: 6 }}>
-                    {report.notes.map((n, idx) => (
-                      <View key={idx} style={{ backgroundColor: 'rgba(0,0,0,0.15)', padding: 8, borderRadius: 8 }}>
-                        <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '700' }}>
-                          {(n.byName || 'User')} · {(n.byRole || '').toString()} {n.createdAt ? `· ${new Date(n.createdAt).toLocaleString()}` : ''}
-                        </Text>
-                        <Text style={{ color: '#FFFFFF', fontSize: 12 }}>{n.text}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
+            <LinearGradient
+              colors={getCardGradient(report.status)}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.card, { borderColor: isDark ? 'rgba(255,255,255,0.15)' : theme.colors.border }]}
+            >
+              <View style={styles.cardHeader}>
+                {renderStatusIcon(report.status)}
+                <Text style={[styles.cardTitle, { color: '#FFFFFF' }]}>{report.title}</Text>
               </View>
-            )}
-            <View style={styles.actions}>
-              {report.status === 'pending' && (
-                <>
-                  <TouchableOpacity
-                    style={[styles.actionBtn, styles.actionBtnGreen]}
-                    onPress={() => requestStatusChange(report.id, 'in-progress')}
-                  >
-                    <Text style={styles.actionText}>in progress</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.actionBtn, styles.actionBtnGreen]}
-                    onPress={() => requestStatusChange(report.id, 'completed')}
-                  >
-                    <Text style={styles.actionText}>completed</Text>
-                  </TouchableOpacity>
-                </>
+              {Array.isArray(report.notes) && report.notes.length > 0 && (
+                <Text style={{ color: '#D1FAE5', fontSize: 12, marginTop: 4 }}>
+                  {report.notes.length} note{report.notes.length > 1 ? 's' : ''}
+                </Text>
               )}
-              {report.status === 'in-progress' && (
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionBtnGreen]}
-                  onPress={() => requestStatusChange(report.id, 'completed')}
-                >
-                  <Text style={styles.actionText}>completed</Text>
-                </TouchableOpacity>
-              )}
-              {report.status === 'completed' && (
-                <View style={styles.completedBadge}>
-                  <Text style={styles.completedBadgeText}>completed</Text>
-                </View>
-              )}
-            </View>
-          </LinearGradient>
+              <View style={styles.statusBadge}>
+                <Text style={styles.statusText}>{report.status.replace('-', ' ')}</Text>
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
         ))}
+        </View>
       </ScrollView>
 
       <Modal visible={noteVisible} transparent animationType="fade" onRequestClose={() => setNoteVisible(false)}>
@@ -253,8 +243,10 @@ const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 80 },
   loadingText: { marginTop: 10, fontSize: 16 },
   card: { marginBottom: 16, padding: 16, borderRadius: 16, borderWidth: 1 },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   cardTitle: { fontSize: 18, fontWeight: '600' },
+  statusBadge: { marginTop: 8, alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  statusText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700', textTransform: 'capitalize' },
   actions: { flexDirection: 'row', gap: 8 },
   actionBtn: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10 },
   actionText: { color: '#FFFFFF', fontWeight: '700', fontSize: 12, textTransform: 'capitalize' },

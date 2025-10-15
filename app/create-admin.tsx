@@ -42,15 +42,15 @@ export default function CreateAdminScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}> 
+    <View style={[styles.container, { backgroundColor: '#000000' }]}> 
       <LinearGradient
-        colors={isDark ? ['#0F172A', '#1E293B'] : ['#27445D', '#27445D']}
+        colors={isDark ? ['#450A0A', '#7F1D1D'] : ['#27445D', '#27445D']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={styles.header}
+        style={[styles.header, { borderColor: 'rgba(255,100,100,0.2)', borderWidth: 1.5 }]}
       >
         <Text style={[styles.title, { color: '#FFFFFF' }]}>Create Admin</Text>
-        <Text style={[styles.subtitle, { color: '#EAF2FF' }]}>Seed an admin without leaving the app</Text>
+        <Text style={[styles.subtitle, { color: '#FECACA' }]}>Seed an admin without leaving the app</Text>
       </LinearGradient>
 
       <View style={styles.form}> 

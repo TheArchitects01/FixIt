@@ -11,7 +11,7 @@ export default function ReportsScreen() {
   const { theme } = useTheme();
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]} showsVerticalScrollIndicator={false}>
+    <ScrollView style={[styles.container, { backgroundColor: '#000000' }]} showsVerticalScrollIndicator={false}>
       {user?.role === 'admin' ? (
         <AdminReports />
       ) : user?.role === 'staff' ? (

@@ -166,7 +166,7 @@ const handleSubmit = async () => {
 };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <View style={[styles.container, { backgroundColor: '#000000' }]}>
       <View style={[styles.header, { backgroundColor: theme.colors.surface, shadowColor: theme.colors.primary }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color={theme.colors.text} />
@@ -174,7 +174,7 @@ const handleSubmit = async () => {
         <Text style={[styles.title, { color: theme.colors.text }]}>Report New Issue</Text>
       </View>
 
-      <ScrollView style={[styles.content, { backgroundColor: theme.colors.background }]} showsVerticalScrollIndicator={false}>
+      <ScrollView style={[styles.content, { backgroundColor: '#000000' }]} showsVerticalScrollIndicator={false}>
         {/* Error Handler */}
         <ErrorHandler 
           error={error} 

@@ -103,7 +103,7 @@ router.patch('/:id', requireAuth, async (req, res) => {
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
     const { id } = req.params;
-    const { status, adminNotes, assignedTo } = req.body || {};
+    const { status, adminNotes, assignedTo, cleanupNotes } = req.body || {};
 
     const allowedStatus = ['pending', 'in-progress', 'completed', 'resolved'];
     const update = {};
@@ -151,7 +151,34 @@ router.patch('/:id', requireAuth, async (req, res) => {
       };
       await Report.findByIdAndUpdate(id, { $push: { notes: note } });
     }
-    return res.json({ report: doc.toJSON() });
+
+    // Cleanup notes if marking as completed (selective note deletion)
+    if (cleanupNotes && (status === 'completed' || status === 'resolved')) {
+      console.log('🧹 Cleanup notes triggered for report:', id);
+      const currentDoc = await Report.findById(id);
+      if (currentDoc && currentDoc.notes && currentDoc.notes.length > 0) {
+        console.log('📝 Notes before cleanup:', currentDoc.notes.length);
+        
+        // Keep only notes that were added when changing status
+        const importantNotes = currentDoc.notes.filter(note => {
+          // Keep notes that have a statusAtTime (notes added during status changes)
+          // These are the important milestone notes
+          if (note.statusAtTime && note.statusAtTime !== 'pending') return true;
+          
+          // Delete standalone notes (notes added without status change)
+          return false;
+        });
+        
+        console.log('✅ Notes after cleanup:', importantNotes.length);
+        
+        // Update the report with cleaned notes
+        await Report.findByIdAndUpdate(id, { notes: importantNotes });
+      }
+    }
+
+    // Fetch the final updated document
+    const finalDoc = await Report.findById(id);
+    return res.json({ report: finalDoc.toJSON() });
   } catch (e) {
     console.error('Update report error', e);
     return res.status(500).json({ error: 'Internal error' });

@@ -61,13 +61,19 @@ export default function StaffScreen() {
   };
 
   const selectStaff = (s: StaffStat) => {
-    setSelectedStaff(s);
-    loadReportsForStaff(s.staffId);
+    // Toggle: if clicking the same staff, collapse it
+    if (selectedStaff?.staffId === s.staffId) {
+      setSelectedStaff(null);
+      setStaffReports([]);
+    } else {
+      setSelectedStaff(s);
+      loadReportsForStaff(s.staffId);
+    }
   };
 
   if (loading) {
     return (
-      <View style={[styles.centered, { backgroundColor: theme.colors.background }]}>
+      <View style={[styles.centered, { backgroundColor: '#000000' }]}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
         <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>Loading staff…</Text>
       </View>
@@ -75,17 +81,17 @@ export default function StaffScreen() {
   }
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}
+    <ScrollView style={[styles.container, { backgroundColor: '#000000' }]}
                 contentContainerStyle={{ paddingBottom: 24 }}>
       {isDark ? (
         <LinearGradient
-          colors={['#0F172A', '#1E293B']}
+          colors={['#450A0A', '#7F1D1D']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={styles.header}
+          style={[styles.header, { borderColor: 'rgba(255,100,100,0.2)', borderWidth: 1.5 }]}
         >
           <Text style={[styles.title, { color: '#FFFFFF' }]}>Staff</Text>
-          <Text style={[styles.subtitle, { color: '#EAF2FF' }]}>Overview of staff and their assigned tasks</Text>
+          <Text style={[styles.subtitle, { color: '#FECACA' }]}>Overview of staff and their assigned tasks</Text>
         </LinearGradient>
       ) : (
         <View style={[styles.header, { backgroundColor: '#27445D', borderWidth: 1, borderColor: '#27445D' }] }>

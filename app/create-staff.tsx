@@ -54,7 +54,7 @@ export default function CreateStaffScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}> 
+    <View style={[styles.container, { backgroundColor: '#000000' }]}> 
       <LinearGradient
         colors={isDark ? ['#064E3B', '#065F46'] : ['#10B981', '#10B981']}
         start={{ x: 0, y: 0 }}

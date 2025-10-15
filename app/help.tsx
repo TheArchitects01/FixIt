@@ -10,7 +10,7 @@ export default function HelpScreen() {
   const { theme } = useTheme();
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <View style={[styles.container, { backgroundColor: '#000000' }]}>
       <View style={[styles.header, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color={theme.colors.text} />
@@ -18,7 +18,7 @@ export default function HelpScreen() {
         <Text style={[styles.title, { color: theme.colors.text }]}>Help & Support</Text>
       </View>
 
-      <ScrollView style={[styles.content, { backgroundColor: theme.colors.background }]} showsVerticalScrollIndicator={false}>
+      <ScrollView style={[styles.content, { backgroundColor: '#000000' }]} showsVerticalScrollIndicator={false}>
         <Card style={{ backgroundColor: theme.colors.surface }}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>What is FixIt?</Text>
           <Text style={[styles.text, { color: theme.colors.textSecondary }]}>

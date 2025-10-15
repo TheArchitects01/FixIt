@@ -150,7 +150,7 @@ export default function CampusReports() {
   );
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: palette.screenBackground }] }>
+    <ScrollView style={[styles.container, { backgroundColor: '#000000' }] }>
       <Text style={[styles.title, { color: palette.textPrimary }]}>Campus Reports ({filteredReports.length})</Text>
 
       <View style={styles.filtersRow}>

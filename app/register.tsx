@@ -186,14 +186,14 @@ const handleRegister = async () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#000000',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 20,
     paddingTop: 60,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#000000',
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
   },

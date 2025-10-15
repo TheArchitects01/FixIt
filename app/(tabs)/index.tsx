@@ -12,21 +12,21 @@ export default function DashboardScreen() {
 
   if (user?.role === 'admin') {
     return (
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}> 
+      <View style={[styles.container, { backgroundColor: '#000000' }]}> 
         <AdminDashboard />
       </View>
     );
   }
   if (user?.role === 'staff') {
     return (
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}> 
+      <View style={[styles.container, { backgroundColor: '#000000' }]}> 
         <StaffDashboard />
       </View>
     );
   }
   return (
     <ScrollView
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      style={[styles.container, { backgroundColor: '#000000' }]}
       contentContainerStyle={{ paddingBottom: 24, flexGrow: 1 }}
       showsVerticalScrollIndicator={false}
     >

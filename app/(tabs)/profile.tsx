@@ -30,11 +30,25 @@ export default function ProfileScreen() {
   const { theme, isDark, toggleTheme } = useTheme();
   const [confirmVisible, setConfirmVisible] = useState(false);
   
-  const themeColor = useMemo(() => 
+  const themeColor = useMemo(
+    () =>
     themeColors[user?.role === 'admin' ? 'admin' : 'student'],
     [user?.role]
   );
   const colors = themeColors[user?.role || 'student'];
+
+  // Role-based gradient colors
+  const getGradientColors = (): [string, string] => {
+    if (user?.role === 'admin') return ['#450A0A', '#7F1D1D'];
+    if (user?.role === 'staff') return ['#064E3B', '#065F46'];
+    return ['#0F172A', '#1E293B'];
+  };
+
+  const getTextColor = () => {
+    if (user?.role === 'admin') return '#FECACA';
+    if (user?.role === 'staff') return '#D1FAE5';
+    return '#E5EDFF';
+  };
 
   const handleUpdateProfileImage = async () => {
     try {
@@ -80,13 +94,13 @@ export default function ProfileScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <View style={[styles.container, { backgroundColor: '#000000' }]}>
       <View style={[styles.header, { shadowColor: themeColor.primary }]}>
-        <Text style={[styles.title, { color: isDark ? '#FFFFFF' : '#000000' }]}>Profile</Text>
+        <Text style={[styles.title, { color: '#FFFFFF' }]}>Profile</Text>
       </View>
 
       <LinearGradient
-        colors={isDark ? ['#0F172A', '#1E293B'] : ['#27445D', '#27445D']}
+        colors={isDark ? getGradientColors() : ['#27445D', '#27445D']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[
@@ -139,7 +153,7 @@ export default function ProfileScreen() {
 
         <TouchableOpacity style={styles.menuItemOuter} onPress={handleHelp}>
           <LinearGradient
-            colors={isDark ? ['#0F172A', '#1E293B'] : ['#71BBB2', '#71BBB2']}
+            colors={isDark ? getGradientColors() : ['#71BBB2', '#71BBB2']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={[
@@ -161,7 +175,7 @@ export default function ProfileScreen() {
 
         <TouchableOpacity style={styles.menuItemOuter} onPress={handleAbout}>
           <LinearGradient
-            colors={isDark ? ['#0F172A', '#1E293B'] : ['#71BBB2', '#71BBB2']}
+            colors={isDark ? getGradientColors() : ['#71BBB2', '#71BBB2']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={[
