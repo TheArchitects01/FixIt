@@ -9,7 +9,7 @@ const ReportSchema = new mongoose.Schema(
       room: { type: String, required: true },
     },
     photo: { type: String, default: null },
-    status: { type: String, enum: ['pending', 'in-progress', 'resolved'], default: 'pending' },
+    status: { type: String, enum: ['pending', 'in-progress', 'resolved', 'rejected'], default: 'pending' },
     priority: { type: String, enum: ['low', 'medium', 'high', 'urgent'], default: 'medium' },
     studentId: { type: String, required: true, index: true },
     studentName: { type: String },
@@ -17,6 +17,7 @@ const ReportSchema = new mongoose.Schema(
     upvotesCount: { type: Number, default: 0 },
     adminNotes: { type: String, default: '' },
     assignedTo: { type: String, default: '' },
+    wasEverAssigned: { type: Boolean, default: false },
     notes: {
       type: [
         new mongoose.Schema(
@@ -25,7 +26,8 @@ const ReportSchema = new mongoose.Schema(
             byName: { type: String },
             byRole: { type: String, enum: ['student', 'admin', 'staff'] },
             text: { type: String },
-            statusAtTime: { type: String, enum: ['pending', 'in-progress', 'resolved'] },
+            statusAtTime: { type: String, enum: ['pending', 'in-progress', 'resolved', 'rejected'] },
+            noteType: { type: String, enum: ['status_change', 'assignment', 'general'], default: 'general' },
             createdAt: { type: Date, default: Date.now },
           },
           { _id: false }

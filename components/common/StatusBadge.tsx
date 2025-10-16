@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 
 interface StatusBadgeProps {
-  status: 'pending' | 'in-progress' | 'resolved' | 'complete' | 'completed';
+  status: 'pending' | 'in-progress' | 'resolved' | 'complete' | 'completed' | 'rejected';
 }
 
 export function StatusBadge({ status }: StatusBadgeProps) {
@@ -18,6 +18,8 @@ export function StatusBadge({ status }: StatusBadgeProps) {
         return styles.complete;
       case 'completed':
         return styles.completed;
+      case 'rejected':
+        return styles.rejected;
       default:
         return styles.complete;
     }
@@ -35,6 +37,8 @@ export function StatusBadge({ status }: StatusBadgeProps) {
         return styles.completeText;
       case 'completed':
         return styles.completedText;
+      case 'rejected':
+        return styles.rejectedText;
       default:
         return styles.completeText;
     }
@@ -73,6 +77,9 @@ const styles = StyleSheet.create({
   completed: {
     backgroundColor: '#D1FAE5',
   },
+  rejected: {
+    backgroundColor: '#FEE2E2',
+  },
   text: {
     fontSize: 13,
     fontWeight: '600',
@@ -92,5 +99,8 @@ const styles = StyleSheet.create({
   },
   completedText: {
     color: '#065F46',
+  },
+  rejectedText: {
+    color: '#DC2626',
   },
 });

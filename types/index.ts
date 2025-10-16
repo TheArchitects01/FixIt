@@ -5,6 +5,7 @@ export interface User {
   studentId?: string;
   staffId?: string;
   profileImage?: string | null;
+  email?: string;
 }
 
 export interface Issue {
@@ -16,7 +17,7 @@ export interface Issue {
     room: string;
   };
   photo?: string;
-  status: 'pending' | 'in-progress' | 'resolved';
+  status: 'pending' | 'in-progress' | 'resolved' | 'rejected';
   priority: 'low' | 'medium' | 'high' | 'urgent';
   studentId: string;
   studentName: string;

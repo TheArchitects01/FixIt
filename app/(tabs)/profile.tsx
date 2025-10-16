@@ -1,13 +1,16 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Image, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Image, Modal, TextInput } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { User, LogOut, CircleHelp as HelpCircle, Info, Camera } from 'lucide-react-native';
+import { User, LogOut, CircleHelp as HelpCircle, Info, Camera, Key, Trash2, AlertTriangle } from 'lucide-react-native';
 import { Card } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/components/common/ThemeProvider';
 import * as ImagePicker from 'expo-image-picker';
+import { ChangePassword } from '@/components/profile/ChangePassword';
+import { apiPost } from '@/services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const themeColors = {
   student: {
@@ -29,6 +32,10 @@ export default function ProfileScreen() {
   const { user, logout, updateProfileImage } = useAuth();
   const { theme, isDark, toggleTheme } = useTheme();
   const [confirmVisible, setConfirmVisible] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showDeleteDbModal, setShowDeleteDbModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deletingDb, setDeletingDb] = useState(false);
   
   const themeColor = useMemo(
     () =>
@@ -93,6 +100,44 @@ export default function ProfileScreen() {
     router.push('/about');
   };
 
+  const handleDeleteDatabase = async () => {
+    if (!deletePassword.trim()) {
+      Alert.alert('Error', 'Please enter your password');
+      return;
+    }
+
+    try {
+      setDeletingDb(true);
+      const token = await AsyncStorage.getItem('token');
+      
+      await apiPost('/auth/delete-reports', {
+        password: deletePassword
+      }, token || undefined);
+
+      Alert.alert(
+        'Reports Deleted', 
+        'All reports have been permanently deleted.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setShowDeleteDbModal(false);
+              setDeletePassword('');
+              logout();
+              router.replace('/login');
+            }
+          }
+        ]
+      );
+    } catch (error: any) {
+      console.error('Delete database error:', error);
+      const errorMessage = error?.response?.data?.error || 'Failed to delete database';
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setDeletingDb(false);
+    }
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: '#000000' }]}>
       <View style={[styles.header, { shadowColor: themeColor.primary }]}>
@@ -136,16 +181,28 @@ export default function ProfileScreen() {
         </TouchableOpacity>
         <Text style={[styles.nameText, { color: '#FFFFFF' }]}>{user?.name}</Text>
         <Text style={[styles.roleText, { color: '#E0ECFF' }]}>
-          {user?.role === 'admin' ? 'Administrator' : 'Student'}
+          {user?.role === 'admin' ? 'Administrator' : user?.role === 'staff' ? 'Staff' : 'Student'}
         </Text>
         <View style={[styles.idContainer, { backgroundColor: 'rgba(255,255,255,0.12)', borderColor: 'rgba(255,255,255,0.25)' }]}>
           <Text style={[styles.idText, { color: '#E5EDFF' }]}>
             {user?.role === 'admin' 
               ? `Staff ID: ${user?.staffId}` 
+              : user?.role === 'staff'
+              ? `Staff ID: ${user?.staffId}`
               : `Student ID: ${user?.studentId}`
             }
           </Text>
         </View>
+        
+        {/* Password Change Button - For all users */}
+        {user && (
+          <TouchableOpacity
+            style={styles.passwordButton}
+            onPress={() => setShowPasswordModal(true)}
+          >
+            <Text style={styles.passwordButtonText}>Change Password</Text>
+          </TouchableOpacity>
+        )}
       </LinearGradient>
 
       <View style={styles.menuContainer}>
@@ -194,6 +251,7 @@ export default function ProfileScreen() {
             <Text style={[styles.menuText, { color: '#FFFFFF' }]}>About FixIt</Text>
           </LinearGradient>
         </TouchableOpacity>
+
       </View>
 
       <Button
@@ -247,6 +305,93 @@ export default function ProfileScreen() {
                 style={[styles.modalButton, { backgroundColor: '#FEE2E2', borderColor: '#FCA5A5' }]}
               >
                 <Text style={[styles.modalButtonText, { color: '#EF4444' }]}>Logout</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Password Change Modal */}
+      <Modal
+        visible={showPasswordModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowPasswordModal(false)}
+      >
+        <View style={[styles.modalCard, { backgroundColor: theme.colors.background, flex: 1, marginTop: 50 }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: theme.colors.border }]}>
+            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Change Password</Text>
+            <TouchableOpacity
+              onPress={() => setShowPasswordModal(false)}
+              style={styles.modalButton}
+            >
+              <Text style={[styles.modalButtonText, { color: themeColor.primary }]}>Done</Text>
+            </TouchableOpacity>
+          </View>
+          <ChangePassword />
+        </View>
+      </Modal>
+
+      {/* Database Deletion Modal */}
+      <Modal
+        visible={showDeleteDbModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDeleteDbModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: theme.colors.surface, borderColor: '#DC2626', borderWidth: 2 }]}>
+            <View style={styles.dangerHeader}>
+              <AlertTriangle size={32} color="#DC2626" />
+              <Text style={[styles.dangerTitle, { color: '#DC2626' }]}>DANGER ZONE</Text>
+            </View>
+            
+            <Text style={[styles.dangerWarning, { color: theme.colors.text }]}>
+              This will permanently delete ALL reports including:
+            </Text>
+            
+            <View style={styles.dangerList}>
+              <Text style={[styles.dangerItem, { color: theme.colors.text }]}>• All student reports</Text>
+              <Text style={[styles.dangerItem, { color: theme.colors.text }]}>• All report history</Text>
+              <Text style={[styles.dangerItem, { color: theme.colors.text }]}>• All notes and data</Text>
+              <Text style={[styles.dangerItem, { color: '#DC2626', fontWeight: 'bold' }]}>• THIS CANNOT BE UNDONE!</Text>
+            </View>
+
+            <Text style={[styles.passwordLabel, { color: theme.colors.text }]}>
+              Enter your admin password to confirm:
+            </Text>
+            
+            <TextInput
+              style={[styles.passwordInput, { 
+                borderColor: '#DC2626', 
+                backgroundColor: theme.colors.background,
+                color: theme.colors.text 
+              }]}
+              value={deletePassword}
+              onChangeText={setDeletePassword}
+              secureTextEntry
+              placeholder="Admin password"
+              placeholderTextColor={theme.colors.textSecondary}
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowDeleteDbModal(false);
+                  setDeletePassword('');
+                }}
+                style={[styles.modalButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
+              >
+                <Text style={[styles.modalButtonText, { color: theme.colors.text }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleDeleteDatabase}
+                disabled={deletingDb}
+                style={[styles.modalButton, { backgroundColor: '#DC2626', borderColor: '#DC2626', opacity: deletingDb ? 0.6 : 1 }]}
+              >
+                <Text style={[styles.modalButtonText, { color: '#FFFFFF' }]}>
+                  {deletingDb ? 'Deleting...' : 'DELETE DATABASE'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -441,6 +586,75 @@ const styles = StyleSheet.create({
   },
   modalButtonText: {
     fontSize: 15,
+    fontWeight: '600',
+  },
+  passwordButton: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.6)',
+  },
+  passwordButtonText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+  },
+  dangerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    gap: 12,
+  },
+  dangerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    letterSpacing: 1,
+  },
+  dangerWarning: {
+    fontSize: 16,
+    marginBottom: 16,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  dangerList: {
+    marginBottom: 20,
+    paddingHorizontal: 20,
+  },
+  dangerItem: {
+    fontSize: 14,
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  passwordLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  passwordInput: {
+    borderWidth: 2,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    marginBottom: 20,
+    textAlign: 'center',
     fontWeight: '600',
   },
 });

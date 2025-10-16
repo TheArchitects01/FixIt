@@ -23,7 +23,8 @@ interface Report {
   photo?: string;
   adminNotes?: string;
   assignedTo?: string;
-  status: 'pending' | 'in-progress' | 'completed';
+  assignedToName?: string;
+  status: 'pending' | 'in-progress' | 'completed' | 'rejected';
   priority: 'low' | 'medium' | 'high' | 'urgent';
 }
 
@@ -32,7 +33,7 @@ export function StudentReports() {
   const { theme, isDark } = useTheme();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'in-progress' | 'completed'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'in-progress' | 'completed' | 'rejected'>('all');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [truncated, setTruncated] = useState<Record<string, boolean>>({});
   const [collapsedText, setCollapsedText] = useState<Record<string, string>>({});
@@ -85,6 +86,7 @@ export function StudentReports() {
       case 'pending': return '#F59E0B';
       case 'in-progress': return '#2563EB';
       case 'completed': return '#10B981';
+      case 'rejected': return '#DC2626';
       default: return '#6B7280';
     }
   };
@@ -96,6 +98,7 @@ export function StudentReports() {
         case 'in-progress': return ['#0C4A6E', '#1E3A8A']; // blue dark
         case 'completed': return ['#064E3B', '#065F46']; // green dark
         case 'pending': return ['#451A03', '#7C2D12']; // amber dark
+        case 'rejected': return ['#7F1D1D', '#DC2626']; // red dark
         default: return ['#0F172A', '#1E293B']; // slate dark
       }
     } else {
@@ -103,6 +106,7 @@ export function StudentReports() {
         case 'in-progress': return ['#5B8DEF', '#1E40AF']; // blue light (much darker)
         case 'completed': return ['#1F8F5A', '#065F46']; // green light (much darker)
         case 'pending': return ['#FDBA74', '#C2410C']; // amber light (much darker)
+        case 'rejected': return ['#F87171', '#DC2626']; // red light (much darker)
         default: return ['#94A3B8', '#475569']; // slate light (much darker)
       }
     }
@@ -175,7 +179,7 @@ export function StudentReports() {
 
       <View style={styles.filtersContainer}>
         <View style={styles.statusFilters}>
-          {(['all', 'pending', 'in-progress', 'completed'] as const).map((status) => (
+          {(['all', 'pending', 'in-progress', 'completed', 'rejected'] as const).map((status) => (
             <TouchableOpacity
               key={status}
               style={[
@@ -235,6 +239,13 @@ export function StudentReports() {
                     <Clock size={14} color={'rgba(255,255,255,0.85)'} />
                     <Text style={[styles.dateText, { color: 'rgba(255,255,255,0.85)' }]}>{formatDate(report.createdAt)}</Text>
                   </View>
+                  {report.assignedTo && (
+                    <View style={[styles.assignmentInfo, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
+                      <Text style={[styles.assignmentText, { color: '#FFFFFF' }]}>
+                        Assigned to: {report.assignedToName || 'Unknown Staff'} (ID: {report.assignedTo})
+                      </Text>
+                    </View>
+                  )}
                 </View>
                 {report.photo && (
                   <Image source={{ uri: report.photo }} style={styles.thumbnail} resizeMode="cover" />
@@ -326,6 +337,13 @@ export function StudentReports() {
                     <Clock size={14} color={'rgba(255,255,255,0.85)'} />
                     <Text style={[styles.dateText, { color: 'rgba(255,255,255,0.85)' }]}>{formatDate(report.createdAt)}</Text>
                   </View>
+                  {report.assignedTo && (
+                    <View style={[styles.assignmentInfo, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
+                      <Text style={[styles.assignmentText, { color: '#FFFFFF' }]}>
+                        Assigned to: {report.assignedToName || 'Unknown Staff'} (ID: {report.assignedTo})
+                      </Text>
+                    </View>
+                  )}
                 </View>
                 {report.photo && (
                   <Image source={{ uri: report.photo }} style={styles.thumbnail} resizeMode="cover" />
@@ -612,5 +630,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
+  },
+  assignmentInfo: {
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  assignmentText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

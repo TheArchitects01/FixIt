@@ -165,4 +165,93 @@ router.get('/me', requireAuth, async (req, res) => {
   }
 });
 
+// POST /auth/change-password { currentPassword, newPassword }
+router.post('/change-password', requireAuth, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body || {};
+    
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current password and new password required' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
+
+    // Get current user
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Allow all authenticated users to change passwords
+    if (user.role !== 'admin' && user.role !== 'staff' && user.role !== 'student') {
+      return res.status(403).json({ error: 'Invalid user role' });
+    }
+
+    // Verify current password
+    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!isCurrentPasswordValid) {
+      return res.status(400).json({ error: 'Current password is incorrect' });
+    }
+
+    // Hash new password
+    const newPasswordHash = await bcrypt.hash(newPassword, 12);
+
+    // Update password
+    await User.findByIdAndUpdate(req.user.id, { passwordHash: newPasswordHash });
+
+    return res.json({ message: 'Password changed successfully' });
+  } catch (e) {
+    console.error('Change password error', e);
+    return res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+// POST /auth/delete-reports { password } - DANGEROUS: Delete all reports (admin only)
+router.post('/delete-reports', requireAuth, async (req, res) => {
+  try {
+    const { password } = req.body || {};
+    
+    if (!password) {
+      return res.status(400).json({ error: 'Password required' });
+    }
+
+    // Get current user and verify admin role
+    const user = await User.findById(req.user.id);
+    if (!user || user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    // Verify admin password
+    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+    if (!isPasswordValid) {
+      return res.status(400).json({ error: 'Invalid password' });
+    }
+
+    console.log('🚨 REPORTS DELETION INITIATED by admin:', user.name, user.email);
+
+    // Import Report model
+    const Report = (await import('../models/Report.js')).default;
+    
+    // Count reports before deletion
+    const reportCount = await Report.countDocuments();
+    
+    // Delete all reports
+    const result = await Report.deleteMany({});
+    
+    console.log(`🗑️ Deleted ${result.deletedCount} reports`);
+    console.log('💥 ALL REPORTS DELETED');
+
+    return res.json({ 
+      message: 'All reports deleted successfully',
+      deletedCount: result.deletedCount,
+      previousCount: reportCount
+    });
+  } catch (e) {
+    console.error('Delete reports error', e);
+    return res.status(500).json({ error: 'Internal error' });
+  }
+});
+
 export default router;

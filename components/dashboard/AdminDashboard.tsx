@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/components/common/ThemeProvider';
 import { useRouter } from 'expo-router';
-import { FileText, Clock, CircleCheck as CheckCircle, TriangleAlert as AlertTriangle } from 'lucide-react-native';
+import { FileText, Clock, CircleCheck as CheckCircle, TriangleAlert as AlertTriangle, User } from 'lucide-react-native';
 import { Card } from '@/components/common/Card';
 import { useAuth } from '@/contexts/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -92,15 +92,35 @@ export function AdminDashboard() {
             { shadowColor: '#DC2626', borderColor: 'rgba(255,100,100,0.2)', borderWidth: 1.5, paddingTop: 32, marginBottom: 16 },
           ]}
         >
-          <Text style={{ ...styles.welcomeText, color: '#FEE2E2' }}>Admin Dashboard</Text>
-          <Text style={[styles.nameText, { color: '#FFFFFF' }]}>{user?.name}</Text>
-          <Text style={[styles.subtitleText, { color: '#FECACA' }]}>Staff ID: {user?.staffId}</Text>
+          <View style={styles.headerContent}>
+            <View style={styles.headerText}>
+              <Text style={{ ...styles.welcomeText, color: '#FEE2E2' }}>Admin Dashboard</Text>
+              <Text style={[styles.nameText, { color: '#FFFFFF' }]}>{user?.name}</Text>
+              <Text style={[styles.subtitleText, { color: '#FECACA' }]}>Staff ID: {user?.staffId}</Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.profileButton}
+              onPress={() => router.push('/profile')}
+            >
+              <User size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
         </LinearGradient>
       ) : (
         <View style={{ ...styles.header, backgroundColor: '#27445D', shadowColor: '#27445D', borderColor: '#1F3A52', borderWidth: 1, paddingTop: 32, marginBottom: 16 }}>
-          <Text style={{ ...styles.welcomeText, color: '#E5EDFF' }}>Admin Dashboard</Text>
-          <Text style={[styles.nameText, { color: '#FFFFFF' }]}>{user?.name}</Text>
-          <Text style={[styles.subtitleText, { color: '#BFD2FF' }]}>Staff ID: {user?.staffId}</Text>
+          <View style={styles.headerContent}>
+            <View style={styles.headerText}>
+              <Text style={{ ...styles.welcomeText, color: '#E5EDFF' }}>Admin Dashboard</Text>
+              <Text style={[styles.nameText, { color: '#FFFFFF' }]}>{user?.name}</Text>
+              <Text style={[styles.subtitleText, { color: '#BFD2FF' }]}>Staff ID: {user?.staffId}</Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.profileButton}
+              onPress={() => router.push('/profile')}
+            >
+              <User size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -339,9 +359,37 @@ const styles = StyleSheet.create({
   },
   manageButtonText: {
     color: '#FFFFFF',
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
-    letterSpacing: 0.3,
-    textAlign: 'center',
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerText: {
+    flex: 1,
+  },
+  profileButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  profileImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  profilePlaceholder: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
   },
 });

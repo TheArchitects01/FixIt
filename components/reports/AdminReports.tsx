@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, TextInput,
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/components/common/ThemeProvider';
 import { useRouter } from 'expo-router';
-import { User, MapPin, Clock, CheckCircle, Play, AlertTriangle, RefreshCw } from 'lucide-react-native';
+import { User, MapPin, Clock, CheckCircle, Play, AlertTriangle, RefreshCw, ChevronDown } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Card } from '@/components/common/Card';
 import { apiGet, apiPatch } from '@/services/api';
@@ -23,6 +23,16 @@ interface Report {
   priority: 'low' | 'medium' | 'high' | 'urgent';
 }
 
+interface StaffMember {
+  staffId: string;
+  name: string;
+  profileImage?: string;
+  total: number;
+  pending: number;
+  inProgress: number;
+  completed: number;
+}
+
 export function AdminReports() {
   const router = useRouter();
   const [allReports, setAllReports] = useState<Report[]>([]);
@@ -32,6 +42,10 @@ export function AdminReports() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'in-progress' | 'completed' | 'rejected'>('all');
   const { theme, isDark } = useTheme();
   const [assignIds, setAssignIds] = useState<Record<string, string>>({});
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
+  const [staffLoading, setStaffLoading] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState<Record<string, boolean>>({});
+  const [dropdownPosition, setDropdownPosition] = useState<{ reportId: string; x: number; y: number; width: number } | null>(null);
 
   // Prompt for note when updating status
   const [noteVisible, setNoteVisible] = useState(false);
@@ -69,8 +83,23 @@ export function AdminReports() {
     setRefreshing(false);
   };
 
+  const loadStaffMembers = async () => {
+    try {
+      setStaffLoading(true);
+      const token = await AsyncStorage.getItem('token');
+      const resp = await apiGet('/users/staff-stats', token || undefined);
+      setStaffMembers(resp.stats || []);
+    } catch (e) {
+      console.error('Error loading staff:', e);
+      setStaffMembers([]);
+    } finally {
+      setStaffLoading(false);
+    }
+  };
+
   useEffect(() => {
     reloadAllReports();
+    loadStaffMembers();
   }, []);
 
   const updateReportStatus = async (
@@ -317,7 +346,13 @@ export function AdminReports() {
                   colors={getCardGradient(report.status)}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
-                  style={[styles.gradientCard, { borderColor: isDark ? 'rgba(255,255,255,0.15)' : theme.colors.border }]}
+                  style={[
+                    styles.gradientCard, 
+                    { 
+                      borderColor: isDark ? 'rgba(255,255,255,0.15)' : theme.colors.border,
+                      zIndex: dropdownOpen[report.id] ? 10000 : 1
+                    }
+                  ]}
                 >
                   <View style={styles.titleRow}>
                     {renderStatusIcon(report.status)}
@@ -325,19 +360,57 @@ export function AdminReports() {
                   </View>
                   <Text style={[styles.metaText, { marginTop: 4, color: 'rgba(255,255,255,0.9)' }]}>Student ID: {report.studentId || 'N/A'}</Text>
 
-                  {/* Assign to staff (admin only), hidden for completed or when already assigned */}
-                  {report.status !== 'completed' && !report.assignedTo && (
+                  {/* Assign to staff (admin only), hidden for completed, rejected, or when already assigned */}
+                  {report.status !== 'completed' && report.status !== 'rejected' && !report.assignedTo && (
                     <View style={[styles.assignRow, { borderColor: 'rgba(255,255,255,0.25)' }]}> 
-                      <Text style={[styles.assignLabel, { color: 'rgba(255,255,255,0.95)' }]}>Assign to Staff ID</Text>
+                      <Text style={[styles.assignLabel, { color: 'rgba(255,255,255,0.95)' }]}>Assign to Staff</Text>
                       <View style={styles.assignControls}>
-                        <TextInput
-                          style={[styles.assignInput, { borderColor: 'rgba(255,255,255,0.35)', color: '#FFFFFF' }]}
-                          placeholder="e.g., 5551"
-                          placeholderTextColor={'rgba(255,255,255,0.7)'}
-                          value={assignIds[report.id] || ''}
-                          onChangeText={(val) => setAssignIds(prev => ({ ...prev, [report.id]: val }))}
-                        />
-                        <TouchableOpacity style={[styles.assignBtn, { backgroundColor: '#10B981' }]} onPress={() => requestAssignment(report.id)}>
+                        <View style={[styles.dropdownContainer, { borderColor: 'rgba(255,255,255,0.35)' }]}>
+                          <TouchableOpacity 
+                            style={styles.dropdownButton}
+                            onPress={(event) => {
+                              // Measure button position for modal dropdown
+                              event.currentTarget.measure((x, y, width, height, pageX, pageY) => {
+                                setDropdownPosition({
+                                  reportId: report.id,
+                                  x: pageX,
+                                  y: pageY + height,
+                                  width: width
+                                });
+                              });
+                            }}
+                          >
+                            <Text style={[styles.dropdownText, { color: '#FFFFFF' }]}>
+                              {assignIds[report.id] 
+                                ? (() => {
+                                    const staff = staffMembers.find(s => s.staffId === assignIds[report.id]);
+                                    if (staff) {
+                                      const runningTasks = staff.pending + staff.inProgress;
+                                      return `${staff.name} (${staff.staffId}) - ${runningTasks} running`;
+                                    }
+                                    return assignIds[report.id];
+                                  })()
+                                : 'Select Staff Member'
+                              }
+                            </Text>
+                            <ChevronDown 
+                              size={16} 
+                              color="rgba(255,255,255,0.7)" 
+                              style={{ 
+                                transform: [{ rotate: dropdownPosition?.reportId === report.id ? '180deg' : '0deg' }] 
+                              }} 
+                            />
+                          </TouchableOpacity>
+                        </View>
+                        
+                        <TouchableOpacity 
+                          style={[
+                            styles.assignBtn, 
+                            { backgroundColor: assignIds[report.id] ? '#10B981' : '#6B7280' }
+                          ]} 
+                          onPress={() => requestAssignment(report.id)}
+                          disabled={!assignIds[report.id]}
+                        >
                           <Text style={styles.assignBtnText}>Assign</Text>
                         </TouchableOpacity>
                       </View>
@@ -453,6 +526,74 @@ export function AdminReports() {
             </View>
           </View>
         </View>
+      </Modal>
+
+      {/* Staff Selection Modal Dropdown */}
+      <Modal
+        visible={dropdownPosition !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDropdownPosition(null)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setDropdownPosition(null)}
+        >
+          {dropdownPosition && (
+            <View
+              style={[
+                styles.modalDropdown,
+                {
+                  position: 'absolute',
+                  top: dropdownPosition.y,
+                  left: dropdownPosition.x,
+                  width: dropdownPosition.width,
+                  backgroundColor: 'rgba(0,0,0,0.95)',
+                }
+              ]}
+            >
+              <ScrollView 
+                style={styles.modalDropdownScroll}
+                showsVerticalScrollIndicator={false}
+              >
+                {staffMembers.map((staff) => (
+                  <TouchableOpacity
+                    key={staff.staffId}
+                    style={[styles.dropdownOption, { backgroundColor: 'rgba(255,255,255,0.1)' }]}
+                    onPress={() => {
+                      setAssignIds(prev => ({ ...prev, [dropdownPosition.reportId]: staff.staffId }));
+                      setDropdownPosition(null);
+                    }}
+                  >
+                    <View style={styles.staffOptionContainer}>
+                      <View style={styles.staffImageContainer}>
+                        {staff.profileImage ? (
+                          <Image 
+                            source={{ uri: staff.profileImage }} 
+                            style={styles.staffImage}
+                          />
+                        ) : (
+                          <View style={[styles.staffImagePlaceholder, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                            <User size={20} color="rgba(255,255,255,0.7)" />
+                          </View>
+                        )}
+                      </View>
+                      <View style={styles.staffInfo}>
+                        <Text style={[styles.dropdownOptionText, { color: '#FFFFFF' }]}>
+                          {staff.name} ({staff.staffId})
+                        </Text>
+                        <Text style={[styles.taskCountText, { color: 'rgba(255,255,255,0.8)' }]}>
+                          {staff.pending + staff.inProgress} running ({staff.pending} pending, {staff.inProgress} active)
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+        </TouchableOpacity>
       </Modal>
 
       {noteVisible && (
@@ -664,7 +805,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 16,
     borderWidth: 1,
-    overflow: 'hidden',
+    overflow: 'visible',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.08,
@@ -782,5 +923,96 @@ const styles = StyleSheet.create({
   adminNotes: {
     fontSize: 14,
     // Color applied inline
+  },
+  dropdownContainer: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 10,
+    marginRight: 8,
+    position: 'relative',
+  },
+  dropdownButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  dropdownText: {
+    flex: 1,
+    fontSize: 13,
+  },
+  dropdownOptions: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    maxHeight: 200,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+    zIndex: 9999,
+    marginTop: 2,
+  },
+  dropdownOption: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  dropdownOptionText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  taskCountText: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  modalDropdown: {
+    maxHeight: 200,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  modalDropdownScroll: {
+    maxHeight: 200,
+  },
+  staffOptionContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  staffImageContainer: {
+    marginRight: 12,
+  },
+  staffImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  staffImagePlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  staffInfo: {
+    flex: 1,
   },
 });

@@ -9,8 +9,9 @@ import { useFocusEffect } from 'expo-router';
 
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { User, MapPin, Clock, FileText } from 'lucide-react-native';
+import { useAuth } from '@/contexts/AuthContext';
 
-type Status = 'pending' | 'in-progress' | 'completed';
+type Status = 'pending' | 'in-progress' | 'completed' | 'rejected';
 
 type ReportItem = {
   id: string;
@@ -27,9 +28,10 @@ type ReportItem = {
 };
 
 export default function CampusReports() {
+  const { user } = useAuth();
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'in-progress' | 'completed'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'in-progress' | 'completed' | 'rejected'>('all');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [truncated, setTruncated] = useState<Record<string, boolean>>({});
   const [collapsedText, setCollapsedText] = useState<Record<string, string>>({});
@@ -41,7 +43,10 @@ export default function CampusReports() {
         setReports([]);
         return;
       }
-      const resp = await apiGet('/reports', token);
+      
+      // Students can only see rejected reports with admin notes
+      const endpoint = user?.role === 'student' ? '/reports/rejected' : '/reports';
+      const resp = await apiGet(endpoint, token);
       const list = Array.isArray(resp?.reports) ? resp.reports : [];
       const mappedReports: ReportItem[] = list.map((report: any) => ({
         id: report._id || report.id,
@@ -63,7 +68,7 @@ export default function CampusReports() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user?.role]);
 
   useEffect(() => {
     fetchReports();
@@ -96,6 +101,7 @@ export default function CampusReports() {
     const v = (value || 'pending').toString().trim().toLowerCase();
     if (['in-progress', 'inprogress', 'in_progress', 'progress'].includes(v)) return 'in-progress';
     if (['complete', 'completed', 'resolved', 'done', 'closed', 'success'].includes(v)) return 'completed';
+    if (['rejected', 'deny', 'denied'].includes(v)) return 'rejected';
     if (['pending', 'new', 'open', 'created'].includes(v)) return 'pending';
     return 'pending';
   };
@@ -129,6 +135,7 @@ export default function CampusReports() {
         case 'in-progress': return ['#0C4A6E', '#1E3A8A'];
         case 'complete': return ['#064E3B', '#065F46'];
         case 'pending': return ['#451A03', '#7C2D12'];
+        case 'rejected': return ['#7F1D1D', '#DC2626'];
         default: return ['#0F172A', '#1E293B'];
       }
     } else {
@@ -136,6 +143,7 @@ export default function CampusReports() {
         case 'in-progress': return ['#5B8DEF', '#1E40AF'];
         case 'complete': return ['#1F8F5A', '#065F46'];
         case 'pending': return ['#FDBA74', '#C2410C'];
+        case 'rejected': return ['#F87171', '#DC2626'];
         default: return ['#94A3B8', '#475569'];
       }
     }
@@ -149,31 +157,38 @@ export default function CampusReports() {
     statusFilter === 'all' ? true : r.status === statusFilter
   );
 
+  // For students, show a different title and no filters since they only see rejected reports
+  const isStudent = user?.role === 'student';
+  const pageTitle = isStudent ? 'Rejected Reports with Admin Notes' : 'Campus Reports';
+  const availableFilters = isStudent ? ['all'] : ['all','pending','in-progress','completed','rejected'];
+
   return (
     <ScrollView style={[styles.container, { backgroundColor: '#000000' }] }>
-      <Text style={[styles.title, { color: palette.textPrimary }]}>Campus Reports ({filteredReports.length})</Text>
+      <Text style={[styles.title, { color: palette.textPrimary }]}>{pageTitle} ({filteredReports.length})</Text>
 
-      <View style={styles.filtersRow}>
-        {(['all','pending','in-progress','completed'] as const).map((s) => (
-          <TouchableOpacity
-            key={s}
-            onPress={() => setStatusFilter(s)}
-            style={[
-              styles.filterBtn,
-              { borderColor: isDark ? '#2C2C2E' : '#E2E8F0', backgroundColor: isDark ? '#1F1F21' : '#FFFFFF' },
-              statusFilter === s && { backgroundColor: '#3B82F6', borderColor: '#3B82F6' }
-            ]}
-          >
-            <Text style={[
-              styles.filterText,
-              { color: isDark ? '#B0B0B0' : '#374151' },
-              statusFilter === s && { color: '#FFFFFF', fontWeight: '700' }
-            ]}>
-              {s === 'all' ? 'All' : s.replace('-', ' ').replace(/\b\w/g, c => c.toUpperCase())}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      {!isStudent && (
+        <View style={styles.filtersRow}>
+          {availableFilters.map((s) => (
+            <TouchableOpacity
+              key={s}
+              onPress={() => setStatusFilter(s as any)}
+              style={[
+                styles.filterBtn,
+                { borderColor: isDark ? '#2C2C2E' : '#E2E8F0', backgroundColor: isDark ? '#1F1F21' : '#FFFFFF' },
+                statusFilter === s && { backgroundColor: '#3B82F6', borderColor: '#3B82F6' }
+              ]}
+            >
+              <Text style={[
+                styles.filterText,
+                { color: isDark ? '#B0B0B0' : '#374151' },
+                statusFilter === s && { color: '#FFFFFF', fontWeight: '700' }
+              ]}>
+                {s === 'all' ? 'All' : s.replace('-', ' ').replace(/\b\w/g, c => c.toUpperCase())}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
       {filteredReports.map((report) => (
         <LinearGradient

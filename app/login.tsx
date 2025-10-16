@@ -225,7 +225,7 @@ export default function LoginScreen() {
         <View style={styles.form}>
           <View style={styles.inputContainer}>
             <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
-              {selectedRole === 'student' ? 'Student ID' : 'Staff ID'}
+              {selectedRole === 'student' ? 'Student ID' : selectedRole === 'admin' ? 'Admin ID' : 'Staff ID'}
             </Text>
             <TextInput
               style={[
@@ -241,6 +241,8 @@ export default function LoginScreen() {
               onChangeText={setId}
               placeholder={selectedRole === 'student' 
                 ? 'Enter your student ID' 
+                : selectedRole === 'admin'
+                ? 'Enter your admin ID'
                 : 'Enter your staff ID'
               }
               autoCapitalize="none"

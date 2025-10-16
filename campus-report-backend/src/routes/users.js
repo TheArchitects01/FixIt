@@ -68,6 +68,7 @@ router.get('/staff-stats', requireAuth, async (req, res) => {
       return {
         staffId: c._id,
         name: u.name || 'Unknown',
+        profileImage: u.profileImage || null,
         total: c.total,
         pending: c.pending,
         inProgress: c.inProgress,
@@ -79,12 +80,31 @@ router.get('/staff-stats', requireAuth, async (req, res) => {
     staffUsers.forEach(u => {
       const sid = u.staffId || '';
       if (sid && !result.find(r => r.staffId === sid)) {
-        result.push({ staffId: sid, name: u.name, total: 0, pending: 0, inProgress: 0, completed: 0 });
+        result.push({ 
+          staffId: sid, 
+          name: u.name, 
+          profileImage: u.profileImage || null,
+          total: 0, 
+          pending: 0, 
+          inProgress: 0, 
+          completed: 0 
+        });
       }
     });
 
-    // Sort by total desc
-    result.sort((a, b) => b.total - a.total);
+    // Sort by running tasks (pending + inProgress) ascending, then by name
+    result.sort((a, b) => {
+      const aRunning = a.pending + a.inProgress;
+      const bRunning = b.pending + b.inProgress;
+      
+      // First sort by running tasks (ascending - least busy first)
+      if (aRunning !== bRunning) {
+        return aRunning - bRunning;
+      }
+      
+      // If same running tasks, sort by name alphabetically
+      return a.name.localeCompare(b.name);
+    });
     return res.json({ stats: result });
   } catch (e) {
     console.error('Staff stats error', e);
