@@ -17,10 +17,16 @@ interface Report {
   updatedAt?: any;
   studentId: string;
   photo?: string;
-  adminNotes?: string;
+  rejectionNote?: string;
+  assignmentNote?: string;
   assignedTo?: string;
   status: 'pending' | 'in-progress' | 'completed' | 'rejected';
   priority: 'low' | 'medium' | 'high' | 'urgent';
+  statusNotes?: Array<{
+    status: 'in-progress' | 'resolved';
+    note: string;
+    createdAt: string;
+  }>;
 }
 
 interface StaffMember {
@@ -47,17 +53,13 @@ export function AdminReports() {
   const [dropdownOpen, setDropdownOpen] = useState<Record<string, boolean>>({});
   const [dropdownPosition, setDropdownPosition] = useState<{ reportId: string; x: number; y: number; width: number } | null>(null);
 
-  // Prompt for note when updating status
-  const [noteVisible, setNoteVisible] = useState(false);
-  const [noteText, setNoteText] = useState('');
-  const [pendingUpdate, setPendingUpdate] = useState<{
-    id: string;
-    status: 'pending' | 'in-progress' | 'completed' | 'rejected';
-  } | null>(null);
-
-  // Assignment with note
+  // Note and modal states
+  const [rejectionModalVisible, setRejectionModalVisible] = useState(false);
+  const [rejectionNote, setRejectionNote] = useState('');
+  const [pendingRejection, setPendingRejection] = useState<string | null>(null);
+  
   const [assignModalVisible, setAssignModalVisible] = useState(false);
-  const [assignNote, setAssignNote] = useState('');
+  const [assignmentNote, setAssignmentNote] = useState('');
   const [pendingAssignment, setPendingAssignment] = useState<{ id: string; staffId: string } | null>(null);
 
   const reloadAllReports = async () => {
@@ -102,51 +104,37 @@ export function AdminReports() {
     loadStaffMembers();
   }, []);
 
-  const updateReportStatus = async (
-    reportId: string,
-    newStatus: 'pending' | 'in-progress' | 'completed' | 'rejected',
-    note?: string
-  ) => {
+  const rejectReport = async (reportId: string, note: string) => {
     try {
       const token = await AsyncStorage.getItem('token');
-      await apiPatch(`/reports/${reportId}`, { status: newStatus, adminNotes: note || undefined }, token || undefined);
-      setAllReports((prev) => prev.map((r) => (r.id === reportId ? { ...r, status: newStatus, adminNotes: note || r.adminNotes } : r)));
-      Alert.alert('Success', `Report marked as ${newStatus}`);
-    } catch (error) {
-      console.error('Error updating report status:', error);
-      Alert.alert('Error', 'Failed to update report status');
-    }
-  };
-
-  const requestAssignment = (reportId: string) => {
-    const staffId = (assignIds[reportId] || '').trim();
-    if (!staffId) {
-      Alert.alert('Assign', 'Please enter a Staff ID');
-      return;
-    }
-    setPendingAssignment({ id: reportId, staffId });
-    setAssignNote('');
-    setAssignModalVisible(true);
-  };
-
-  const assignReportToStaff = async () => {
-    if (!pendingAssignment) return;
-    
-    try {
-      const { id, staffId } = pendingAssignment;
-      const token = await AsyncStorage.getItem('token');
-      await apiPatch(`/reports/${id}`, { 
-        assignedTo: staffId, 
-        adminNotes: assignNote.trim() || undefined 
+      await apiPatch(`/reports/${reportId}`, { 
+        status: 'rejected',
+        rejectionNote: note
       }, token || undefined);
-      setAllReports(prev => prev.map(r => r.id === id ? { ...r, assignedTo: staffId } as any : r));
-      // Clear input for this report to reflect applied change
-      setAssignIds(prev => ({ ...prev, [id]: '' }));
+      setAllReports((prev) => prev.map((r) => (
+        r.id === reportId ? { ...r, status: 'rejected', rejectionNote: note } : r
+      )));
+      Alert.alert('Success', 'Report rejected');
+    } catch (error) {
+      console.error('Error rejecting report:', error);
+      Alert.alert('Error', 'Failed to reject report');
+    }
+  };
+
+  const assignReportToStaff = async (reportId: string, staffId: string, note?: string) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      await apiPatch(`/reports/${reportId}`, { 
+        assignedTo: staffId,
+        assignmentNote: note
+      }, token || undefined);
+      setAllReports(prev => prev.map(r => r.id === reportId ? { 
+        ...r, 
+        assignedTo: staffId,
+        assignmentNote: note
+      } : r));
+      setAssignIds(prev => ({ ...prev, [reportId]: '' }));
       Alert.alert('Assigned', `Report assigned to Staff ID ${staffId}`);
-      setAssignModalVisible(false);
-      setPendingAssignment(null);
-      setAssignNote('');
-      // Ensure UI is in sync with server (and filters)
       await reloadAllReports();
     } catch (e) {
       console.error('Assign report error:', e);
@@ -256,6 +244,24 @@ export function AdminReports() {
       </View>
     );
   }
+
+  const handleRejectReport = () => {
+    if (pendingRejection && rejectionNote.trim()) {
+      rejectReport(pendingRejection, rejectionNote);
+      setRejectionModalVisible(false);
+      setPendingRejection(null);
+      setRejectionNote('');
+    }
+  };
+
+  const handleAssignReport = () => {
+    if (pendingAssignment && pendingAssignment.staffId) {
+      assignReportToStaff(pendingAssignment.id, pendingAssignment.staffId, assignmentNote.trim() || undefined);
+      setAssignModalVisible(false);
+      setPendingAssignment(null);
+      setAssignmentNote('');
+    }
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: '#000000' }]}> 
@@ -408,7 +414,13 @@ export function AdminReports() {
                             styles.assignBtn, 
                             { backgroundColor: assignIds[report.id] ? '#10B981' : '#6B7280' }
                           ]} 
-                          onPress={() => requestAssignment(report.id)}
+                          onPress={() => {
+                            const staffId = assignIds[report.id];
+                            if (staffId) {
+                              setPendingAssignment({ id: report.id, staffId });
+                              setAssignModalVisible(true);
+                            }
+                          }}
                           disabled={!assignIds[report.id]}
                         >
                           <Text style={styles.assignBtnText}>Assign</Text>
@@ -424,7 +436,10 @@ export function AdminReports() {
                   {report.status === 'pending' && !report.assignedTo && (
                     <TouchableOpacity 
                       style={[styles.rejectBtn, { backgroundColor: '#DC2626', marginTop: 12 }]} 
-                      onPress={() => requestStatusChange(report.id, 'rejected')}
+                      onPress={() => {
+                        setPendingRejection(report.id);
+                        setRejectionModalVisible(true);
+                      }}
                     >
                       <AlertTriangle size={16} color="#FFFFFF" />
                       <Text style={styles.rejectBtnText}>Reject Report</Text>
@@ -435,98 +450,6 @@ export function AdminReports() {
             ))}
           </ScrollView>
         )}
-
-      {/* Note Prompt Modal */}
-      <Modal
-        visible={noteVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setNoteVisible(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}> 
-            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Add a note</Text>
-            <Text style={[styles.modalMessage, { color: theme.colors.textSecondary }]}>Please provide a short note for this status change.</Text>
-            <TextInput
-              style={[
-                styles.modalInput,
-                { borderColor: theme.colors.border, color: theme.colors.text, backgroundColor: isDark ? theme.colors.card : 'rgba(0,0,0,0.03)' },
-              ]}
-              placeholder="Enter note (required)"
-              placeholderTextColor={theme.colors.textSecondary}
-              value={noteText}
-              onChangeText={setNoteText}
-              multiline
-            />
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                onPress={() => { setNoteVisible(false); setPendingUpdate(null); setNoteText(''); }}
-                style={[styles.modalButton, { backgroundColor: isDark ? '#2A2A2E' : '#F1F5F9', borderColor: theme.colors.border }]}
-              >
-                <Text style={[styles.modalButtonText, { color: theme.colors.text }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                disabled={!noteText.trim() || !pendingUpdate}
-                onPress={async () => {
-                  if (pendingUpdate && noteText.trim()) {
-                    const { id, status } = pendingUpdate;
-                    await updateReportStatus(id, status, noteText.trim());
-                    setNoteVisible(false);
-                    setPendingUpdate(null);
-                    setNoteText('');
-                  }
-                }}
-                style={[styles.modalButton, { backgroundColor: '#DBEAFE', borderColor: '#93C5FD' }]}
-              >
-                <Text style={[styles.modalButtonText, { color: theme.colors.primary }]}>Confirm</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Assignment Note Modal */}
-      <Modal
-        visible={assignModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setAssignModalVisible(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}> 
-            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Add a note for staff</Text>
-            <Text style={[styles.modalMessage, { color: theme.colors.textSecondary }]}>
-              Provide instructions or details for the assigned staff member (optional).
-            </Text>
-            <TextInput
-              style={[
-                styles.modalInput,
-                { borderColor: theme.colors.border, color: theme.colors.text, backgroundColor: isDark ? theme.colors.card : 'rgba(0,0,0,0.03)' },
-              ]}
-              placeholder="Enter note (optional)"
-              placeholderTextColor={theme.colors.textSecondary}
-              value={assignNote}
-              onChangeText={setAssignNote}
-              multiline
-            />
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                onPress={() => { setAssignModalVisible(false); setPendingAssignment(null); setAssignNote(''); }}
-                style={[styles.modalButton, { backgroundColor: isDark ? '#2A2A2E' : '#F1F5F9', borderColor: theme.colors.border }]}
-              >
-                <Text style={[styles.modalButtonText, { color: theme.colors.text }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                disabled={!pendingAssignment}
-                onPress={assignReportToStaff}
-                style={[styles.modalButton, { backgroundColor: '#10B981', borderColor: '#10B981' }]}
-              >
-                <Text style={[styles.modalButtonText, { color: '#FFFFFF' }]}>Assign</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       {/* Staff Selection Modal Dropdown */}
       <Modal
@@ -596,12 +519,125 @@ export function AdminReports() {
         </TouchableOpacity>
       </Modal>
 
-      {noteVisible && (
+      {/* Rejection Modal */}
+      <Modal
+        visible={rejectionModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setRejectionModalVisible(false);
+          setPendingRejection(null);
+          setRejectionNote('');
+        }}
+      >
         <TouchableOpacity
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-          onPress={() => setNoteVisible(false)}
-        />
-      )}
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => {
+            setRejectionModalVisible(false);
+            setPendingRejection(null);
+            setRejectionNote('');
+          }}
+        >
+          <View style={[styles.modalCard, { backgroundColor: '#000000', borderColor: 'rgba(255,255,255,0.2)' }]}>
+            <Text style={[styles.modalTitle, { color: '#FFFFFF' }]}>Reject Report</Text>
+            <Text style={[styles.modalMessage, { color: 'rgba(255,255,255,0.8)' }]}>
+              Please provide a reason for rejecting this report. This note will be visible to the student.
+            </Text>
+            <TextInput
+              style={[styles.modalInput, { 
+                backgroundColor: 'rgba(255,255,255,0.1)', 
+                borderColor: 'rgba(255,255,255,0.2)',
+                color: '#FFFFFF'
+              }]}
+              value={rejectionNote}
+              onChangeText={setRejectionNote}
+              placeholder="Enter rejection reason..."
+              placeholderTextColor="rgba(255,255,255,0.4)"
+              multiline
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, { borderColor: 'rgba(255,255,255,0.2)' }]}
+                onPress={() => {
+                  setRejectionModalVisible(false);
+                  setPendingRejection(null);
+                  setRejectionNote('');
+                }}
+              >
+                <Text style={[styles.modalButtonText, { color: 'rgba(255,255,255,0.8)' }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: '#DC2626', borderColor: '#DC2626' }]}
+                onPress={handleRejectReport}
+                disabled={!rejectionNote.trim()}
+              >
+                <Text style={[styles.modalButtonText, { color: '#FFFFFF' }]}>Reject Report</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Assignment Modal */}
+      <Modal
+        visible={assignModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setAssignModalVisible(false);
+          setPendingAssignment(null);
+          setAssignmentNote('');
+        }}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => {
+            setAssignModalVisible(false);
+            setPendingAssignment(null);
+            setAssignmentNote('');
+          }}
+        >
+          <View style={[styles.modalCard, { backgroundColor: '#000000', borderColor: 'rgba(255,255,255,0.2)' }]}>
+            <Text style={[styles.modalTitle, { color: '#FFFFFF' }]}>Assign Report</Text>
+            <Text style={[styles.modalMessage, { color: 'rgba(255,255,255,0.8)' }]}>
+              Optionally add a note for the staff member. This note will only be visible to the assigned staff.
+            </Text>
+            <TextInput
+              style={[styles.modalInput, { 
+                backgroundColor: 'rgba(255,255,255,0.1)', 
+                borderColor: 'rgba(255,255,255,0.2)',
+                color: '#FFFFFF'
+              }]}
+              value={assignmentNote}
+              onChangeText={setAssignmentNote}
+              placeholder="Enter note for staff (optional)..."
+              placeholderTextColor="rgba(255,255,255,0.4)"
+              multiline
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, { borderColor: 'rgba(255,255,255,0.2)' }]}
+                onPress={() => {
+                  setAssignModalVisible(false);
+                  setPendingAssignment(null);
+                  setAssignmentNote('');
+                }}
+              >
+                <Text style={[styles.modalButtonText, { color: 'rgba(255,255,255,0.8)' }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: '#10B981', borderColor: '#10B981' }]}
+                onPress={handleAssignReport}
+              >
+                <Text style={[styles.modalButtonText, { color: '#FFFFFF' }]}>Assign Report</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
     </View>
   );
 }

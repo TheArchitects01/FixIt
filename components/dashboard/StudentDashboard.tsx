@@ -27,24 +27,26 @@ export default function StudentDashboard() {
   const { theme, isDark } = useTheme();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
-
   const fetchMyReports = async () => {
     try {
       const token = await AsyncStorage.getItem('token');
       if (!token) return;
 
       const resp = await apiGet('/reports/mine', token);
-      const list = Array.isArray(resp?.reports) ? resp.reports : [] as any[];
-      // Normalize statuses so filters/counts work consistently
-      const normalized = list.map((r: any) => ({
-        ...r,
+      const list = Array.isArray(resp?.reports) ? resp.reports : [];
+      
+      const normalizedReports = list.map((report: any) => ({
+        ...report,
         status:
-          r.status === 'resolved' ? 'completed' :
-          r.status === 'in_progress' ? 'in-progress' : r.status,
+          report.status === 'resolved' ? 'completed' :
+          report.status === 'in_progress' ? 'in-progress' : 
+          report.status,
       }));
-      setReports(normalized as any);
+      
+      setReports(normalizedReports);
     } catch (error) {
       console.error('Error fetching reports:', error);
+      setReports([]);
     } finally {
       setLoading(false);
     }
@@ -54,7 +56,6 @@ export default function StudentDashboard() {
     fetchMyReports();
   }, []);
 
-  // Refresh data when screen is focused (for real-time updates)
   useFocusEffect(
     React.useCallback(() => {
       fetchMyReports();
@@ -62,7 +63,6 @@ export default function StudentDashboard() {
   );
 
   const activeIssues = reports.filter(report => report.status !== 'completed');
-
   const handleReportNewIssue = () => {
     router.push('../report-issue');
   };

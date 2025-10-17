@@ -16,8 +16,6 @@ export function ChangePassword() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-
-  // Allow all authenticated users
   if (!user) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -28,21 +26,33 @@ export function ChangePassword() {
     );
   }
 
-  const handleChangePassword = async () => {
+  const validateForm = () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all fields');
-      return;
+      return false;
     }
 
     if (newPassword !== confirmPassword) {
       Alert.alert('Error', 'New passwords do not match');
-      return;
+      return false;
     }
 
     if (newPassword.length < 6) {
       Alert.alert('Error', 'New password must be at least 6 characters');
-      return;
+      return false;
     }
+
+    return true;
+  };
+
+  const clearForm = () => {
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+  };
+
+  const handleChangePassword = async () => {
+    if (!validateForm()) return;
 
     try {
       setLoading(true);
@@ -54,11 +64,8 @@ export function ChangePassword() {
       }, token || undefined);
 
       Alert.alert('Success', 'Password changed successfully');
+      clearForm();
       
-      // Clear form
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
     } catch (error: any) {
       console.error('Change password error:', error);
       const errorMessage = error?.response?.data?.error || 'Failed to change password';
@@ -76,7 +83,6 @@ export function ChangePassword() {
       </View>
 
       <View style={styles.form}>
-        {/* Current Password */}
         <View style={styles.inputGroup}>
           <Text style={[styles.label, { color: theme.colors.text }]}>Current Password</Text>
           <View style={[styles.inputContainer, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
@@ -101,7 +107,6 @@ export function ChangePassword() {
           </View>
         </View>
 
-        {/* New Password */}
         <View style={styles.inputGroup}>
           <Text style={[styles.label, { color: theme.colors.text }]}>New Password</Text>
           <View style={[styles.inputContainer, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
@@ -126,7 +131,6 @@ export function ChangePassword() {
           </View>
         </View>
 
-        {/* Confirm Password */}
         <View style={styles.inputGroup}>
           <Text style={[styles.label, { color: theme.colors.text }]}>Confirm New Password</Text>
           <View style={[styles.inputContainer, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
@@ -151,7 +155,6 @@ export function ChangePassword() {
           </View>
         </View>
 
-        {/* Change Password Button */}
         <TouchableOpacity
           style={[
             styles.changeButton,
@@ -168,7 +171,6 @@ export function ChangePassword() {
           </Text>
         </TouchableOpacity>
 
-        {/* Password Requirements */}
         <View style={[styles.requirements, { backgroundColor: theme.colors.card }]}>
           <Text style={[styles.requirementsTitle, { color: theme.colors.text }]}>Password Requirements:</Text>
           <Text style={[styles.requirementItem, { color: theme.colors.textSecondary }]}>

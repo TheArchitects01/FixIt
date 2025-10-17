@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Image, ActivityIndicator } from 'react-native';
-import { Search, Filter, Plus, MapPin, Clock, FileText } from 'lucide-react-native';
+import { Search, Filter, Plus, MapPin, Clock, FileText, AlertTriangle } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { Card } from '@/components/common/Card';
 import { StatusBadge } from '@/components/common/StatusBadge';
@@ -21,11 +21,18 @@ interface Report {
   updatedAt?: any;
   studentId: string;
   photo?: string;
-  adminNotes?: string;
   assignedTo?: string;
   assignedToName?: string;
   status: 'pending' | 'in-progress' | 'completed' | 'rejected';
   priority: 'low' | 'medium' | 'high' | 'urgent';
+  rejectionNote?: string;
+  assignmentNote?: string; // For staff visibility
+  statusNotes?: Array<{
+    status: 'in-progress' | 'resolved';
+    note: string;
+    createdAt: string;
+  }>;
+  rejectionNote?: string;
 }
 
 export function StudentReports() {
@@ -48,6 +55,9 @@ export function StudentReports() {
       const items: Report[] = rawItems.map((r) => ({
         ...r,
         status: (r.status === 'resolved' ? 'completed' : r.status) as Report['status'],
+        rejectionNote: r.rejectionNote || undefined,
+        assignmentNote: r.assignmentNote || undefined,
+        statusNotes: Array.isArray(r.statusNotes) ? r.statusNotes : [],
       }));
       setReports(items);
     } catch (e) {
@@ -299,15 +309,51 @@ export function StudentReports() {
                   </View>
                 )}
               </View>
-              {report.adminNotes && (
-                <View style={[styles.notesContainer, { backgroundColor: 'rgba(255,255,255,0.12)' }]}>
-                  <View style={styles.descriptionHeader}>
-                    <FileText size={14} color={'#FFFFFF'} />
-                    <Text style={[styles.notesLabel, { color: '#FFFFFF' }]}>Admin Notes</Text>
+              
+              {/* Show rejection note if report is rejected */}
+              {report.status === 'rejected' && report.rejectionNote && (
+                <View style={[styles.notesContainer, { 
+                  backgroundColor: isDark ? 'rgba(220, 38, 38, 0.1)' : 'rgba(254, 226, 226, 1)',
+                  borderWidth: 1,
+                  borderColor: isDark ? 'rgba(220, 38, 38, 0.3)' : 'rgba(220, 38, 38, 0.2)',
+                  marginTop: 12,
+                  padding: 12,
+                  borderRadius: 8,
+                  position: 'relative'
+                }]}>
+                  {/* Header with Rejection Label */}
+                  <View style={[styles.descriptionHeader, { marginBottom: 8 }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <FileText size={16} color={isDark ? '#EF4444' : '#DC2626'} />
+                      <Text style={[styles.notesLabel, { 
+                        color: isDark ? '#EF4444' : '#DC2626',
+                        fontWeight: '600',
+                        fontSize: 14,
+                        marginLeft: 6
+                      }]}>
+                        Rejection Reason
+                      </Text>
+                    </View>
+                    {/* Alert Icon on the right */}
+                    <View style={{ position: 'absolute', right: 0, top: 0 }}>
+                      <AlertTriangle 
+                        size={18} 
+                        color={isDark ? '#EF4444' : '#DC2626'} 
+                        style={{ opacity: 0.8 }}
+                      />
+                    </View>
                   </View>
-                  <Text style={[styles.notesText, { color: 'rgba(255,255,255,0.9)' }]}>{report.adminNotes}</Text>
+                  {/* Rejection Note Text */}
+                  <Text style={[styles.notesText, { 
+                    color: isDark ? '#FCA5A5' : '#7F1D1D',
+                    fontSize: 13,
+                    lineHeight: 18
+                  }]}>
+                    {report.rejectionNote}
+                  </Text>
                 </View>
               )}
+              {/* Status notes are not shown to students */}
             </LinearGradient>
           ) : (
             <View
@@ -394,13 +440,19 @@ export function StudentReports() {
                   </View>
                 )}
               </View>
-              {report.adminNotes && (
-                <View style={[styles.notesContainer, { backgroundColor: 'rgba(255,255,255,0.12)' }]}>
+              {/* Show rejection note if report is rejected */}
+              {report.status === 'rejected' && report.rejectionNote && (
+                <View style={[styles.notesContainer, { 
+                  backgroundColor: 'rgba(220, 38, 38, 0.15)',
+                  borderWidth: 1,
+                  borderColor: 'rgba(220, 38, 38, 0.3)',
+                  marginTop: 12
+                }]}>
                   <View style={styles.descriptionHeader}>
-                    <FileText size={14} color={'#FFFFFF'} />
-                    <Text style={[styles.notesLabel, { color: '#FFFFFF' }]}>Admin Notes</Text>
+                    <FileText size={14} color={'#DC2626'} />
+                    <Text style={[styles.notesLabel, { color: '#DC2626' }]}>Rejection Reason</Text>
                   </View>
-                  <Text style={[styles.notesText, { color: 'rgba(255,255,255,0.9)' }]}>{report.adminNotes}</Text>
+                  <Text style={[styles.notesText, { color: '#DC2626' }]}>{report.rejectionNote}</Text>
                 </View>
               )}
             </View>
@@ -530,7 +582,9 @@ const styles = StyleSheet.create({
   descriptionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'space-between',
+    width: '100%',
+    position: 'relative',
   },
   descriptionLabel: {
     fontSize: 12,

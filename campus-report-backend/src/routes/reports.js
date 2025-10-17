@@ -44,42 +44,10 @@ router.get('/mine', requireAuth, async (req, res) => {
     
     const reports = await Report.find({ createdBy: req.user.id }).sort({ createdAt: -1 });
     
-    // Get staff information for assigned reports
-    const assignedStaffIds = [...new Set(reports.map(r => r.assignedTo).filter(Boolean))];
-    const staffUsers = assignedStaffIds.length > 0 
-      ? await User.find({ staffId: { $in: assignedStaffIds }, role: 'staff' }).select('staffId name')
-      : [];
-    const staffMap = new Map(staffUsers.map(s => [s.staffId, s.name]));
-    
-    // For students, filter out admin notes and assignment notes, add staff names
+    // For students
     if (user.role === 'student') {
       const filteredReports = reports.map(report => {
         const reportObj = report.toJSON();
-        
-        // Add staff name if assigned
-        if (reportObj.assignedTo) {
-          reportObj.assignedToName = staffMap.get(reportObj.assignedTo) || 'Unknown Staff';
-        }
-        
-        // Remove adminNotes completely for students (could contain assignment notes)
-        delete reportObj.adminNotes;
-        
-        // Filter notes array - only show status_change notes, hide assignment notes
-        if (reportObj.notes && reportObj.notes.length > 0) {
-          reportObj.notes = reportObj.notes.filter(note => {
-            // Keep notes that are explicitly status_change type
-            if (note.noteType === 'status_change') return true;
-            
-            // Hide notes that are explicitly assignment type
-            if (note.noteType === 'assignment') return false;
-            
-            // For existing notes without noteType, be more inclusive:
-            // Keep if it has statusAtTime (likely a status change note)
-            // OR if the report status is rejected (likely a rejection note)
-            return !note.noteType && (note.statusAtTime || reportObj.status === 'rejected');
-          });
-        }
-        
         return reportObj;
       });
       
@@ -100,16 +68,17 @@ router.get('/', requireAuth, async (req, res) => {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
     
-    // Students should use /reports/rejected endpoint instead
-    if (user.role === 'student') {
-      return res.status(403).json({ error: 'Students should use /reports/rejected endpoint' });
-    }
-    
     const { assignedTo } = req.query || {};
     const filter = {};
-    if (assignedTo && typeof assignedTo === 'string') {
+    
+    // Filter reports based on role
+    if (user.role === 'student') {
+      // Students can see all non-pending reports
+      filter.status = { $ne: 'pending' };
+    } else if (assignedTo && typeof assignedTo === 'string') {
       filter.assignedTo = assignedTo;
     }
+    
     const reports = await Report.find(filter).sort({ createdAt: -1 });
     return res.json({ reports: reports.map((r) => r.toJSON()) });
   } catch (e) {
@@ -138,74 +107,7 @@ router.get('/assigned-to-me', requireAuth, async (req, res) => {
   }
 });
 
-// GET /reports/rejected - for students: only rejected reports with admin notes, but not if assigned to staff
-router.get('/rejected', requireAuth, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    if (!user) return res.status(401).json({ error: 'Unauthorized' });
-    if (user.role !== 'student') {
-      return res.status(403).json({ error: 'Forbidden - Students only' });
-    }
 
-    // Find rejected reports that were NEVER assigned to staff and have some notes
-    // Check both wasEverAssigned flag AND current assignedTo field for existing data
-    const reports = await Report.find({ 
-      status: 'rejected',
-      $and: [
-        { wasEverAssigned: { $ne: true } },
-        { 
-          $or: [
-            { assignedTo: { $exists: false } },
-            { assignedTo: '' }
-          ]
-        }
-      ],
-      $or: [
-        { adminNotes: { $exists: true, $ne: '' } },
-        { 'notes.0': { $exists: true } }
-      ]
-    }).sort({ createdAt: -1 });
-    
-    // Filter out assignment notes and adminNotes from the response for students
-    const filteredReports = reports.map(report => {
-      const reportObj = report.toJSON();
-      
-      // Remove adminNotes completely for students (could contain assignment notes)
-      delete reportObj.adminNotes;
-      
-      // Filter notes array - only show status_change notes, hide assignment notes
-      if (reportObj.notes && reportObj.notes.length > 0) {
-        reportObj.notes = reportObj.notes.filter(note => {
-          // Keep notes that are explicitly status_change type
-          if (note.noteType === 'status_change') return true;
-          
-          // Hide notes that are explicitly assignment type
-          if (note.noteType === 'assignment') return false;
-          
-          // For existing notes without noteType, be more inclusive:
-          // Keep if it has statusAtTime (likely a status change note)
-          // OR if the report status is rejected (likely a rejection note)
-          return !note.noteType && (note.statusAtTime || reportObj.status === 'rejected');
-        });
-      }
-      
-      return reportObj;
-    }).filter(report => {
-      // Only return reports that still have valid notes after filtering
-      return report.notes && report.notes.length > 0;
-    });
-    
-    console.log(`🔍 Student accessing rejected reports: Found ${filteredReports.length} reports`);
-    filteredReports.forEach(report => {
-      console.log(`📝 Report ${report.id}: ${report.notes?.length || 0} notes, wasEverAssigned: ${report.wasEverAssigned}, assignedTo: "${report.assignedTo}"`);
-    });
-    
-    return res.json({ reports: filteredReports });
-  } catch (e) {
-    console.error('List rejected reports error', e);
-    return res.status(500).json({ error: 'Internal error' });
-  }
-});
 
 // GET /reports/:id - fetch single report with role-based filtering
 router.get('/:id', requireAuth, async (req, res) => {
@@ -217,42 +119,9 @@ router.get('/:id', requireAuth, async (req, res) => {
     const doc = await Report.findById(id);
     if (!doc) return res.status(404).json({ error: 'Report not found' });
     
-    // Students can only see rejected reports that were NEVER assigned to staff
+    // Students can view their own reports
     if (user.role === 'student') {
-      if (doc.status !== 'rejected') {
-        return res.status(403).json({ error: 'Students can only view rejected reports' });
-      }
-      if (doc.wasEverAssigned || (doc.assignedTo && doc.assignedTo.trim() !== '')) {
-        return res.status(403).json({ error: 'Cannot view reports that were assigned to staff' });
-      }
-      // For students, completely hide adminNotes and filter notes array
       const reportObj = doc.toJSON();
-      
-      // Remove adminNotes completely for students (could contain assignment notes)
-      delete reportObj.adminNotes;
-      
-      // Filter notes array - only show status_change notes, hide assignment notes
-      if (reportObj.notes && reportObj.notes.length > 0) {
-        reportObj.notes = reportObj.notes.filter(note => {
-          // Keep notes that are explicitly status_change type
-          if (note.noteType === 'status_change') return true;
-          
-          // Hide notes that are explicitly assignment type
-          if (note.noteType === 'assignment') return false;
-          
-          // For existing notes without noteType, be more inclusive:
-          // Keep if it has statusAtTime (likely a status change note)
-          // OR if the report status is rejected (likely a rejection note)
-          return !note.noteType && (note.statusAtTime || reportObj.status === 'rejected');
-        });
-      }
-      
-      // Check if there are any valid notes left for students to see
-      const hasValidNotes = reportObj.notes && reportObj.notes.length > 0;
-      if (!hasValidNotes) {
-        return res.status(403).json({ error: 'No admin notes available' });
-      }
-      
       return res.json({ report: reportObj });
     }
     
@@ -270,27 +139,50 @@ router.patch('/:id', requireAuth, async (req, res) => {
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
     const { id } = req.params;
-    const { status, adminNotes, assignedTo } = req.body || {};
+    const { status, assignedTo, rejectionNote, assignmentNote, statusNote } = req.body || {};
 
     const allowedStatus = ['pending', 'in-progress', 'completed', 'resolved', 'rejected'];
     const update = {};
+
+    // Handle status updates
     if (status) {
       if (!allowedStatus.includes(status)) {
         return res.status(400).json({ error: 'Invalid status' });
       }
       update.status = status === 'completed' ? 'resolved' : status;
-    }
-    if (typeof adminNotes === 'string') update.adminNotes = adminNotes;
 
-    // Permissions:
-    // - Admin: can update any report and set assignedTo
-    // - Staff: can update only reports assigned to their staffId; cannot change assignedTo
+      // Require rejection note when admin rejects a report
+      if (status === 'rejected' && user.role === 'admin') {
+        if (!rejectionNote || !rejectionNote.trim()) {
+          return res.status(400).json({ error: 'Rejection note is required when rejecting a report' });
+        }
+        update.rejectionNote = rejectionNote.trim();
+      }
+    }
+
+    // Permissions and role-specific updates
     if (user.role === 'admin') {
+      // Admin assigning to staff
       if (typeof assignedTo === 'string') {
-        update.assignedTo = assignedTo;
-        // If assigning to staff (not empty), mark as ever assigned
         if (assignedTo.trim() !== '') {
+          // Find the staff member to get their name
+          const staffMember = await User.findOne({ staffId: assignedTo.trim() });
+          if (!staffMember) {
+            return res.status(400).json({ error: 'Staff member not found' });
+          }
+          
+          update.assignedTo = assignedTo.trim();
+          update.assignedToName = staffMember.name; // Store staff name
           update.wasEverAssigned = true;
+          
+          // Set assignment note if provided
+          if (assignmentNote && assignmentNote.trim()) {
+            update.assignmentNote = assignmentNote.trim();
+          }
+        } else {
+          update.assignedTo = '';
+          update.assignedToName = null;
+          update.wasEverAssigned = false;
         }
       }
     } else if (user.role === 'staff') {
@@ -299,33 +191,28 @@ router.patch('/:id', requireAuth, async (req, res) => {
       if (!user.staffId || docCurrent.assignedTo !== user.staffId) {
         return res.status(403).json({ error: 'Forbidden' });
       }
-      // staff cannot change assignment
+
+      // Staff adding status note
+      if (status && statusNote && statusNote.trim()) {
+        update.$push = {
+          statusNotes: {
+            status: status === 'completed' ? 'resolved' : status,
+            note: statusNote.trim(),
+            createdAt: new Date()
+          }
+        };
+      }
     } else {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    if (Object.keys(update).length === 0 && typeof adminNotes !== 'string') {
+    if (Object.keys(update).length === 0) {
       return res.status(400).json({ error: 'No valid fields to update' });
     }
 
     // Apply updates
     const doc = await Report.findByIdAndUpdate(id, update, { new: true });
     if (!doc) return res.status(404).json({ error: 'Report not found' });
-
-    // Append note to timeline if provided
-    if (typeof adminNotes === 'string' && adminNotes.trim()) {
-      const noteType = status ? 'status_change' : (assignedTo ? 'assignment' : 'general');
-      const note = {
-        byUserId: user.id,
-        byName: user.name,
-        byRole: user.role,
-        text: adminNotes.trim(),
-        statusAtTime: doc.status, // already normalized above
-        noteType: noteType,
-        createdAt: new Date(),
-      };
-      await Report.findByIdAndUpdate(id, { $push: { notes: note } });
-    }
 
 
     // Fetch the final updated document

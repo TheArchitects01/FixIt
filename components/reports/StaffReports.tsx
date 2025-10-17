@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, TextInput, Alert, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, RefreshControl } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/components/common/ThemeProvider';
 import { useRouter } from 'expo-router';
@@ -12,7 +12,12 @@ interface Report {
   title: string;
   status: 'pending' | 'in-progress' | 'completed';
   priority: 'low' | 'medium' | 'high' | 'urgent';
-  notes?: { byName?: string; byRole?: 'student' | 'admin' | 'staff'; text?: string; createdAt?: string }[];
+  assignmentNote?: string; // Note from admin when assigning the task
+  statusNotes?: Array<{
+    status: 'in-progress' | 'resolved';
+    note: string;
+    createdAt: string;
+  }>;
 }
 
 export function StaffReports() {
@@ -21,9 +26,6 @@ export function StaffReports() {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [noteVisible, setNoteVisible] = useState(false);
-  const [noteText, setNoteText] = useState('');
-  const [pendingUpdate, setPendingUpdate] = useState<{ id: string; status: 'pending' | 'in-progress' | 'completed' } | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'in-progress' | 'completed'>('all');
   const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
 
@@ -37,7 +39,8 @@ export function StaffReports() {
         title: r.title,
         status: r.status === 'resolved' ? 'completed' : (r.status || 'pending'),
         priority: r.priority || 'low',
-        notes: Array.isArray(r.notes) ? r.notes : [],
+        assignmentNote: r.assignmentNote,
+        statusNotes: Array.isArray(r.statusNotes) ? r.statusNotes : [],
       })) as Report[];
       setReports(items);
     } catch (e) {
@@ -84,25 +87,7 @@ export function StaffReports() {
     }
   };
 
-  const requestStatusChange = (id: string, newStatus: Report['status']) => {
-    setPendingUpdate({ id, status: newStatus });
-    setNoteText('');
-    setNoteVisible(true);
-  };
 
-  const updateReportStatus = async (reportId: string, newStatus: Report['status'], note?: string) => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      await apiPatch(`/reports/${reportId}`, { status: newStatus, adminNotes: note || undefined }, token || undefined);
-      setReports(prev => prev.map(r => r.id === reportId ? { ...r, status: newStatus } : r));
-      Alert.alert('Success', `Report marked as ${newStatus}`);
-      // Reload to include newly appended note from server timeline
-      await loadAssigned();
-    } catch (e) {
-      console.error('Staff update status error:', e);
-      Alert.alert('Error', 'Failed to update report status');
-    }
-  };
 
   const filtered = reports.filter(r => {
     if (statusFilter === 'all') return true;
@@ -186,13 +171,23 @@ export function StaffReports() {
                 {renderStatusIcon(report.status)}
                 <Text style={[styles.cardTitle, { color: '#FFFFFF' }]}>{report.title}</Text>
               </View>
-              {Array.isArray(report.notes) && report.notes.length > 0 && (
-                <Text style={{ color: '#D1FAE5', fontSize: 12, marginTop: 4 }}>
-                  {report.notes.length} note{report.notes.length > 1 ? 's' : ''}
+              {/* Show assignment note from admin */}
+              {report.assignmentNote && (
+                <Text style={{ color: '#D1FAE5', fontSize: 12, marginTop: 4, fontStyle: 'italic' }}>
+                  Admin note: {report.assignmentNote}
                 </Text>
               )}
-              <View style={styles.statusBadge}>
-                <Text style={styles.statusText}>{report.status.replace('-', ' ')}</Text>
+
+              {/* Show count of status notes */}
+              {Array.isArray(report.statusNotes) && report.statusNotes.length > 0 && (
+                <Text style={{ color: '#D1FAE5', fontSize: 12, marginTop: 4 }}>
+                  {report.statusNotes.length} status update{report.statusNotes.length > 1 ? 's' : ''}
+                </Text>
+              )}
+              <View style={{ flexDirection: 'row', marginTop: 12, gap: 8 }}>
+                <View style={styles.statusBadge}>
+                  <Text style={styles.statusText}>{report.status.replace('-', ' ')}</Text>
+                </View>
               </View>
             </LinearGradient>
           </TouchableOpacity>
@@ -200,38 +195,7 @@ export function StaffReports() {
         </View>
       </ScrollView>
 
-      <Modal visible={noteVisible} transparent animationType="fade" onRequestClose={() => setNoteVisible(false)}>
-        <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}> 
-            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Add a note</Text>
-            <Text style={[styles.modalMessage, { color: theme.colors.textSecondary }]}>Please provide a short note for this status change.</Text>
-            <TextInput
-              style={[styles.modalInput, { borderColor: theme.colors.border, color: theme.colors.text, backgroundColor: isDark ? theme.colors.card : 'rgba(0,0,0,0.03)' }]}
-              placeholder="Enter note (required)"
-              placeholderTextColor={theme.colors.textSecondary}
-              value={noteText}
-              onChangeText={setNoteText}
-              multiline
-            />
-            <View style={styles.modalActions}>
-              <TouchableOpacity onPress={() => { setNoteVisible(false); setPendingUpdate(null); setNoteText(''); }} style={[styles.modalButton, { backgroundColor: isDark ? '#2A2A2E' : '#F1F5F9', borderColor: theme.colors.border }]}>
-                <Text style={[styles.modalButtonText, { color: theme.colors.text }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity disabled={!noteText.trim() || !pendingUpdate} onPress={async () => {
-                if (pendingUpdate && noteText.trim()) {
-                  const { id, status } = pendingUpdate;
-                  await updateReportStatus(id, status, noteText.trim());
-                  setNoteVisible(false);
-                  setPendingUpdate(null);
-                  setNoteText('');
-                }
-              }} style={[styles.modalButton, { backgroundColor: '#DBEAFE', borderColor: '#93C5FD' }]}>
-                <Text style={[styles.modalButtonText, { color: theme.colors.primary }]}>Confirm</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+
     </View>
   );
 }
@@ -256,12 +220,5 @@ const styles = StyleSheet.create({
   filtersRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   filterBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1 },
   filterText: { fontSize: 12, fontWeight: '700' },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
-  modalCard: { width: '100%', borderRadius: 16, padding: 20, borderWidth: 1 },
-  modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 8 },
-  modalMessage: { fontSize: 14, marginBottom: 12 },
-  modalInput: { minHeight: 80, borderWidth: 1, borderRadius: 10, padding: 10, marginBottom: 16 },
-  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12 },
-  modalButton: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
-  modalButtonText: { fontSize: 15, fontWeight: '600' },
+
 });

@@ -1,14 +1,14 @@
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Image, TouchableOpacity, TextInput } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/components/common/ThemeProvider';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import { apiGet } from '@/services/api';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 
 import { StatusBadge } from '@/components/common/StatusBadge';
-import { User, MapPin, Clock, FileText } from 'lucide-react-native';
+import { User, MapPin, Clock, FileText, Search, ArrowLeft } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 
 type Status = 'pending' | 'in-progress' | 'completed' | 'rejected';
@@ -31,10 +31,12 @@ export default function CampusReports() {
   const { user } = useAuth();
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'in-progress' | 'completed' | 'rejected'>('all');
+
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [truncated, setTruncated] = useState<Record<string, boolean>>({});
   const [collapsedText, setCollapsedText] = useState<Record<string, string>>({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const router = useRouter();
 
   const fetchReports = React.useCallback(async () => {
     try {
@@ -44,9 +46,8 @@ export default function CampusReports() {
         return;
       }
       
-      // Students can only see rejected reports with admin notes
-      const endpoint = user?.role === 'student' ? '/reports/rejected' : '/reports';
-      const resp = await apiGet(endpoint, token);
+      // All users can see campus reports
+      const resp = await apiGet('/reports', token || undefined);
       const list = Array.isArray(resp?.reports) ? resp.reports : [];
       const mappedReports: ReportItem[] = list.map((report: any) => ({
         id: report._id || report.id,
@@ -152,45 +153,67 @@ export default function CampusReports() {
   const toggleExpand = (id: string) =>
     setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 
-  // Apply status filter to reports
-  const filteredReports = reports.filter((r) =>
-    statusFilter === 'all' ? true : r.status === statusFilter
-  );
-
-  // For students, show a different title and no filters since they only see rejected reports
+  // For students, show a different title
   const isStudent = user?.role === 'student';
   const pageTitle = isStudent ? 'Rejected Reports with Admin Notes' : 'Campus Reports';
-  const availableFilters = isStudent ? ['all'] : ['all','pending','in-progress','completed','rejected'];
+
+  // Filter reports based on search query only
+  const searchFilteredReports = reports.filter(report => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      report.title.toLowerCase().includes(query) ||
+      report.description.toLowerCase().includes(query) ||
+      report.studentName.toLowerCase().includes(query) ||
+      report.location.building.toLowerCase().includes(query) ||
+      report.location.room.toLowerCase().includes(query)
+    );
+  });
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: '#000000' }] }>
-      <Text style={[styles.title, { color: palette.textPrimary }]}>{pageTitle} ({filteredReports.length})</Text>
-
-      {!isStudent && (
-        <View style={styles.filtersRow}>
-          {availableFilters.map((s) => (
-            <TouchableOpacity
-              key={s}
-              onPress={() => setStatusFilter(s as any)}
-              style={[
-                styles.filterBtn,
-                { borderColor: isDark ? '#2C2C2E' : '#E2E8F0', backgroundColor: isDark ? '#1F1F21' : '#FFFFFF' },
-                statusFilter === s && { backgroundColor: '#3B82F6', borderColor: '#3B82F6' }
-              ]}
-            >
-              <Text style={[
-                styles.filterText,
-                { color: isDark ? '#B0B0B0' : '#374151' },
-                statusFilter === s && { color: '#FFFFFF', fontWeight: '700' }
-              ]}>
-                {s === 'all' ? 'All' : s.replace('-', ' ').replace(/\b\w/g, c => c.toUpperCase())}
-              </Text>
-            </TouchableOpacity>
-          ))}
+    <View style={[styles.mainContainer, { backgroundColor: '#000000' }]}>
+      {/* Header */}
+                  <View style={styles.reportHeader}>
+        <View style={styles.headerTop}>
+          <TouchableOpacity 
+            onPress={() => router.back()}
+            style={styles.backButton}
+          >
+            <ArrowLeft size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Campus Reports ({searchFilteredReports.length})</Text>
         </View>
-      )}
 
-      {filteredReports.map((report) => (
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <Search size={20} color="rgba(255,255,255,0.5)" style={styles.searchIcon} />
+          <TextInput
+            style={[styles.searchInput, { color: '#FFFFFF' }]}
+            placeholder="Search by title, location, or student..."
+            placeholderTextColor="rgba(255,255,255,0.5)"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            selectionColor="#FFFFFF"
+          />
+        </View>
+
+      </View>
+
+      {/* Reports List */}
+      <ScrollView 
+        style={styles.reportsContainer}
+        contentContainerStyle={styles.reportsContent}
+      >
+        {searchFilteredReports.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>
+              {searchQuery 
+                ? "No reports found matching your search"
+                : "No reports available"}
+            </Text>
+          </View>
+        ) : (
+          searchFilteredReports.map((report) => (
         <LinearGradient
           key={report.id}
           colors={getCardGradient(report.status)}
@@ -286,34 +309,74 @@ export default function CampusReports() {
             </View>
           )}
         </LinearGradient>
-      ))}
-    </ScrollView>
+          ))
+        )}
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 16,
+  mainContainer: {
+    flex: 1,
   },
-  title: {
+  header: {
+    paddingTop: 10,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+    marginTop: 1,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    marginTop: 25,
+    paddingTop: 15,
+  },
+  backButton: {
+    marginRight: 16,
+    marginTop: 30,
+    marginBottom: 10,
+  },
+  headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 12,
+    color: '#FFFFFF',
   },
-  filtersRow: {
+  searchContainer: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
-    flexWrap: 'wrap',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    marginBottom: 16,
   },
-  filterBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    borderWidth: 1,
+  searchIcon: {
+    marginRight: 8,
   },
-  filterText: {
-    fontSize: 12,
+  searchInput: {
+    flex: 1,
+    height: 44,
+    fontSize: 16,
+  },
+
+  reportsContainer: {
+    flex: 1,
+  },
+  reportsContent: {
+    padding: 16,
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+  },
+  emptyStateText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 16,
   },
   reportCard: {
     borderRadius: 12,
@@ -333,7 +396,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  header: {
+  reportHeader: {
     marginBottom: 8,
   },
   priorityAndTitle: {

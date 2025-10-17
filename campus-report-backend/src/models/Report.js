@@ -15,26 +15,17 @@ const ReportSchema = new mongoose.Schema(
     studentName: { type: String },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     upvotesCount: { type: Number, default: 0 },
-    adminNotes: { type: String, default: '' },
     assignedTo: { type: String, default: '' },
+    assignedToName: { type: String, default: null }, // Store staff member's name
     wasEverAssigned: { type: Boolean, default: false },
-    notes: {
-      type: [
-        new mongoose.Schema(
-          {
-            byUserId: { type: String },
-            byName: { type: String },
-            byRole: { type: String, enum: ['student', 'admin', 'staff'] },
-            text: { type: String },
-            statusAtTime: { type: String, enum: ['pending', 'in-progress', 'resolved', 'rejected'] },
-            noteType: { type: String, enum: ['status_change', 'assignment', 'general'], default: 'general' },
-            createdAt: { type: Date, default: Date.now },
-          },
-          { _id: false }
-        ),
-      ],
-      default: [],
-    },
+    // New note fields
+    rejectionNote: { type: String, default: '' }, // For admin to student (required when rejecting)
+    assignmentNote: { type: String, default: '' }, // For admin to staff
+    statusNotes: [{ // For staff to admin
+      status: { type: String, enum: ['in-progress', 'resolved'] },
+      note: { type: String },
+      createdAt: { type: Date, default: Date.now }
+    }],
   },
   { timestamps: true }
 );

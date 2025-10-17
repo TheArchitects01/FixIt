@@ -5,7 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/components/common/ThemeProvider';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/common/Card';
-import { ArrowLeft, MapPin, Clock, AlertTriangle, CheckCircle, Play, RefreshCw } from 'lucide-react-native';
+import { ArrowLeft, MapPin, Clock, AlertTriangle, CheckCircle, Play, RefreshCw, MessageSquare } from 'lucide-react-native';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { apiGet, apiPatch } from '@/services/api';
 
@@ -19,18 +19,16 @@ interface Report {
   studentId: string;
   studentName?: string;
   photo?: string;
-  adminNotes?: string;
   assignedTo?: string;
   status: 'pending' | 'in-progress' | 'completed';
   priority: 'low' | 'medium' | 'high' | 'urgent';
-  notes?: Array<{
-    byUserId?: string;
-    byName?: string;
-    byRole?: 'student' | 'admin' | 'staff';
-    text?: string;
-    statusAtTime?: string;
-    createdAt?: any;
+  statusNotes?: Array<{
+    status: string;
+    note: string;
+    createdAt: string;
   }>;
+  assignmentNote?: string;
+  rejectionNote?: string;
 }
 
 export default function ReportDetailsScreen() {
@@ -41,12 +39,9 @@ export default function ReportDetailsScreen() {
   const [report, setReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
-  // modal states for status update with note
-  const [noteVisible, setNoteVisible] = useState(false);
-  const [noteText, setNoteText] = useState('');
-  const [targetStatus, setTargetStatus] = useState<Report['status'] | null>(null);
-  const [notesExpanded, setNotesExpanded] = useState(true);
+  const [noteModalVisible, setNoteModalVisible] = useState(false);
+  const [note, setNote] = useState('');
+  const [statusToUpdateAfterNote, setStatusToUpdateAfterNote] = useState<'in-progress' | 'completed' | null>(null);
 
   const formatDate = (val: any) => {
     const jsDate = val?.toDate ? val.toDate() : (typeof val === 'string' ? new Date(val) : new Date());
@@ -78,11 +73,12 @@ export default function ReportDetailsScreen() {
         studentId: r.studentId,
         studentName: r.studentName,
         photo: r.photo,
-        adminNotes: r.adminNotes,
         assignedTo: r.assignedTo,
         status: r.status === 'resolved' ? 'completed' : (r.status || 'pending'),
         priority: (r.priority || 'low') as Report['priority'],
-        notes: r.notes || [],
+        statusNotes: r.statusNotes || [],
+        assignmentNote: r.assignmentNote,
+        rejectionNote: r.rejectionNote,
       };
       setReport(normalized);
     } catch (e) {
@@ -101,39 +97,21 @@ export default function ReportDetailsScreen() {
     setRefreshing(false);
   };
 
-  const updateStatus = async (newStatus: Report['status'], note: string) => {
+  const updateStatus = async (newStatus: Report['status']) => {
     try {
       const token = await AsyncStorage.getItem('token');
       const statusChanged = report?.status !== newStatus;
       
-      // Add cleanupNotes flag when marking as completed
-      const payload: any = { 
-        status: newStatus, 
-        adminNotes: note || undefined 
-      };
-      
-      if (newStatus === 'completed' && statusChanged) {
-        payload.cleanupNotes = true; // Signal backend to cleanup routine notes
-      }
-      
-      await apiPatch(`/reports/${id}`, payload, token || undefined);
-      setReport(prev => prev ? { ...prev, status: newStatus, adminNotes: note || prev.adminNotes } : prev);
+      await apiPatch(`/reports/${id}`, { status: newStatus }, token || undefined);
+      setReport(prev => prev ? { ...prev, status: newStatus } : prev);
       
       if (statusChanged) {
         Alert.alert('Success', `Report marked as ${newStatus}`);
-      } else {
-        Alert.alert('Success', 'Note added successfully');
       }
     } catch (e) {
       console.error('Update status failed', e);
       Alert.alert('Error', 'Failed to update status');
     }
-  };
-
-  const openNoteModal = (status: Report['status']) => {
-    setTargetStatus(status);
-    setNoteText('');
-    setNoteVisible(true);
   };
 
   if (loading) {
@@ -209,159 +187,146 @@ export default function ReportDetailsScreen() {
         </View>
         <Text style={[styles.sectionLabel, { color: isDark ? theme.colors.text : '#FFFFFF' }]}>Description</Text>
         <Text style={[styles.description, { color: isDark ? theme.colors.textSecondary : '#D7E2FF' }]}>{report.description || 'No description provided.'}</Text>
+
+        {/* Status Notes Section */}
+        {report.statusNotes && report.statusNotes.length > 0 && (
+          <>
+            <Text style={[styles.sectionLabel, { color: isDark ? theme.colors.text : '#FFFFFF', marginTop: 16 }]}>Status Updates</Text>
+            {report.statusNotes.map((note, index) => (
+              <View key={index} style={[styles.noteContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.1)' }]}>
+                <View style={styles.noteHeader}>
+                  <Text style={[styles.noteStatus, { color: '#10B981' }]}>
+                    {note.status === 'resolved' ? 'Completed' : note.status.replace('-', ' ')}
+                  </Text>
+                  <Text style={[styles.noteDate, { color: isDark ? theme.colors.textSecondary : '#BFD2FF' }]}>
+                    {formatNoteDate(note.createdAt)}
+                  </Text>
+                </View>
+                <Text style={[styles.noteText, { color: isDark ? theme.colors.text : '#FFFFFF' }]}>{note.note}</Text>
+              </View>
+            ))}
+          </>
+        )}
+
         {report.photo && (
           <Image source={{ uri: report.photo }} style={styles.image} resizeMode="cover" />
         )}
-      </Card>
 
-      {/* Admin Add Note Button - only for admins on assigned reports and not completed */}
-      {user?.role === 'admin' && report.assignedTo && report.status !== 'completed' && (
-        <TouchableOpacity 
-          style={[styles.addNoteButton, { backgroundColor: '#10B981' }]}
-          onPress={() => openNoteModal(report.status)}
+        {/* Note Modal */}
+        <Modal
+          animationType="fade"
+          transparent={true}
+          visible={noteModalVisible}
+          onRequestClose={() => setNoteModalVisible(false)}
+          statusBarTranslucent={true}
         >
-          <Text style={styles.addNoteButtonText}>Add Note for Staff</Text>
-        </TouchableOpacity>
-      )}
-
-      {/* Staff Add Note Button - only if not completed */}
-      {user?.role === 'staff' && report.status !== 'completed' && (
-        <TouchableOpacity 
-          style={[styles.addNoteButton, { backgroundColor: '#DC2626' }]}
-          onPress={() => openNoteModal(report.status)}
-        >
-          <Text style={styles.addNoteButtonText}>Add Note for Admin</Text>
-        </TouchableOpacity>
-      )}
-
-      {/* Notes Timeline Section */}
-      {report.notes && report.notes.length > 0 && (
-        <Card style={[styles.card, isDark ? { backgroundColor: theme.colors.card, borderColor: theme.colors.border } : { backgroundColor: '#27445D', borderColor: '#1F3A52' }]}>
-          <TouchableOpacity 
-            style={styles.notesTimelineHeader} 
-            onPress={() => setNotesExpanded(!notesExpanded)}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.notesTimelineTitle, { color: isDark ? theme.colors.text : '#FFFFFF' }]}>
-              Notes Timeline ({report.notes.length})
-            </Text>
-            <Text style={{ color: isDark ? theme.colors.primary : '#93C5FD', fontWeight: 'bold', fontSize: 16 }}>
-              {notesExpanded ? '▲' : '▼'}
-            </Text>
-          </TouchableOpacity>
-
-          {notesExpanded && (
-            <View style={styles.notesTimelineContainer}>
-              {report.notes
-                .slice()
-                .sort((a, b) => {
-                  const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-                  const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-                  return bDate - aDate;
-                })
-                .map((note, idx) => {
-                  const isStaffNote = note.byRole === 'staff';
-                  const isAdminNote = note.byRole === 'admin';
-                  
-                  let bgColor, borderColor, textColor;
-                  
-                  if (isStaffNote) {
-                    // Staff notes - Green
-                    bgColor = isDark ? 'rgba(16, 185, 129, 0.08)' : 'rgba(110, 231, 183, 0.15)';
-                    borderColor = isDark ? '#10B981' : '#6EE7B7';
-                    textColor = isDark ? '#10B981' : '#6EE7B7';
-                  } else if (isAdminNote) {
-                    // Admin notes - Red
-                    bgColor = isDark ? 'rgba(220, 38, 38, 0.08)' : 'rgba(252, 165, 165, 0.15)';
-                    borderColor = isDark ? '#DC2626' : '#FCA5A5';
-                    textColor = isDark ? '#DC2626' : '#FCA5A5';
-                  } else {
-                    // Student notes - Blue
-                    bgColor = isDark ? 'rgba(59, 130, 246, 0.08)' : 'rgba(147, 197, 253, 0.15)';
-                    borderColor = isDark ? theme.colors.primary : '#93C5FD';
-                    textColor = isDark ? theme.colors.primary : '#93C5FD';
-                  }
-                  
-                  return (
-                    <View 
-                      key={idx} 
-                      style={[
-                        styles.noteTimelineCard,
-                        { 
-                          backgroundColor: bgColor,
-                          borderLeftColor: borderColor
-                        }
-                      ]}
-                    >
-                      <View style={styles.noteTimelineHeader}>
-                        <Text style={[styles.noteAuthor, { color: textColor }]}>
-                          {note.byName || 'User'} • {note.byRole || 'user'}
-                        </Text>
-                      <Text style={[styles.noteDate, { color: isDark ? theme.colors.textSecondary : '#BFD2FF' }]}>
-                        {note.statusAtTime ? `(${note.statusAtTime}) • ` : ''}
-                        {note.createdAt ? formatNoteDate(note.createdAt) : ''}
-                      </Text>
-                    </View>
-                    <Text style={[styles.noteText, { color: isDark ? theme.colors.text : '#FFFFFF' }]}>
-                      {note.text || 'No content'}
-                    </Text>
-                  </View>
-                );
-              })}
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { backgroundColor: isDark ? theme.colors.card : '#27445D' }]}>
+              <Text style={[styles.modalTitle, { color: isDark ? theme.colors.text : '#FFFFFF' }]}>
+                {statusToUpdateAfterNote === 'in-progress' ? 'Start Progress' :
+                 statusToUpdateAfterNote === 'completed' ? 'Mark Complete' :
+                 'Add Note'}
+              </Text>
+              <TextInput
+                style={[styles.noteInput, { 
+                  color: isDark ? theme.colors.text : '#FFFFFF',
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.1)',
+                }]}
+                placeholder="Enter your note..."
+                placeholderTextColor={isDark ? theme.colors.textSecondary : '#BFD2FF'}
+                value={note}
+                onChangeText={setNote}
+                multiline
+              />
+              <View style={styles.modalButtons}>
+                <TouchableOpacity 
+                  style={[styles.modalButton, { backgroundColor: '#EF4444' }]}
+                  onPress={() => {
+                    setNoteModalVisible(false);
+                    setNote('');
+                  }}
+                >
+                  <Text style={styles.modalButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.modalButton, { backgroundColor: '#10B981' }]}
+                  onPress={async () => {
+                    if (!note.trim()) {
+                      Alert.alert('Error', 'Please enter a note');
+                      return;
+                    }
+                    try {
+                      // Close modal first for better UX
+                      setNoteModalVisible(false);
+                      
+                      const token = await AsyncStorage.getItem('token');
+                      await apiPatch(`/reports/${id}`, { 
+                        statusNote: note.trim(),
+                        status: statusToUpdateAfterNote || report.status
+                      }, token || undefined);
+                      
+                      // Clear states and reload after API call
+                      setNote('');
+                      setStatusToUpdateAfterNote(null);
+                      await load();
+                      Alert.alert('Success', statusToUpdateAfterNote ? 
+                        `Status updated to ${statusToUpdateAfterNote} with note` : 
+                        'Note added successfully'
+                      );
+                    } catch (e) {
+                      console.error('Update failed', e);
+                      Alert.alert('Error', 'Failed to update');
+                    }
+                  }}
+                >
+                  <Text style={styles.modalButtonText}>Save</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          )}
-        </Card>
-      )}
+          </View>
+        </Modal>
 
-      {/* Staff Status Change Buttons */}
-      {user?.role === 'staff' && (
-        <View style={{ paddingHorizontal: 16, paddingBottom: 24, gap: 10 }}>
-          {report.status === 'pending' && (
-            <TouchableOpacity style={[styles.actionButton, { backgroundColor: '#10B981' }]} onPress={() => openNoteModal('in-progress')}>
-              <Play size={18} color="#FFFFFF" />
-              <Text style={styles.actionText}>Start Progress</Text>
-            </TouchableOpacity>
-          )}
-          {report.status !== 'completed' && (
-            <TouchableOpacity style={[styles.actionButton, { backgroundColor: '#10B981' }]} onPress={() => openNoteModal('completed')}>
-              <CheckCircle size={18} color="#FFFFFF" />
-              <Text style={styles.actionText}>Mark Complete</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
-
-      <Modal visible={noteVisible} transparent animationType="fade" onRequestClose={() => setNoteVisible(false)}>
-        <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}> 
-            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Add a note</Text>
-            <Text style={[styles.modalMessage, { color: theme.colors.textSecondary }]}>Provide a short note for this status change.</Text>
-            <TextInput
-              style={[styles.modalInput, { borderColor: theme.colors.border, color: theme.colors.text, backgroundColor: isDark ? theme.colors.card : 'rgba(0,0,0,0.03)' }]}
-              placeholder="Enter note (required)"
-              placeholderTextColor={theme.colors.textSecondary}
-              value={noteText}
-              onChangeText={setNoteText}
-              multiline
-            />
-            <View style={styles.modalActions}>
-              <TouchableOpacity onPress={() => { setNoteVisible(false); setTargetStatus(null); setNoteText(''); }} style={[styles.modalButton, { backgroundColor: isDark ? '#2A2A2E' : '#F1F5F9', borderColor: theme.colors.border }]}>
-                <Text style={[styles.modalButtonText, { color: theme.colors.text }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity disabled={!noteText.trim() || !targetStatus} onPress={async () => {
-                if (targetStatus && noteText.trim()) {
-                  await updateStatus(targetStatus, noteText.trim());
-                  setNoteVisible(false);
-                  setTargetStatus(null);
-                  setNoteText('');
-                }
-              }} style={[styles.modalButton, { backgroundColor: '#DBEAFE', borderColor: '#93C5FD' }]}>
-                <Text style={[styles.modalButtonText, { color: theme.colors.primary }]}>Confirm</Text>
+        {/* Staff Status Change Buttons */}
+        {user?.role === 'staff' && report.status !== 'completed' && (
+          <View style={[styles.actionButtonsContainer, { backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.1)' }]}>
+            <View style={styles.actionButtonsRow}>
+              {report.status === 'pending' ? (
+                <TouchableOpacity 
+                  style={[styles.actionButton, { flex: 1, backgroundColor: '#10B981' }]} 
+                  onPress={() => {
+                    setNoteModalVisible(true);
+                    setStatusToUpdateAfterNote('in-progress');
+                  }}
+                >
+                  <Play size={18} color="#FFFFFF" />
+                  <Text style={styles.actionText}>Start Progress</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity 
+                  style={[styles.actionButton, { flex: 1, backgroundColor: '#10B981' }]} 
+                  onPress={() => {
+                    setNoteModalVisible(true);
+                    setStatusToUpdateAfterNote('completed');
+                  }}
+                >
+                  <CheckCircle size={18} color="#FFFFFF" />
+                  <Text style={styles.actionText}>Mark Complete</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity 
+                style={[styles.actionButton, { flex: 1, backgroundColor: '#3B82F6' }]} 
+                onPress={() => {
+                  setNoteModalVisible(true);
+                  setStatusToUpdateAfterNote(null);
+                }}
+              >
+                <MessageSquare size={18} color="#FFFFFF" />
+                <Text style={styles.actionText}>Add Note</Text>
               </TouchableOpacity>
             </View>
           </View>
-        </View>
-      </Modal>
+        )}
+      </Card>
     </ScrollView>
   );
 }
@@ -381,53 +346,112 @@ const styles = StyleSheet.create({
   sectionLabel: { marginTop: 12, fontSize: 14, fontWeight: '700' },
   description: { marginTop: 6, fontSize: 14, lineHeight: 20 },
   image: { width: '100%', height: 220, borderRadius: 10, marginTop: 12 },
-  addNoteButton: { marginHorizontal: 16, marginTop: 8, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 12, alignItems: 'center' },
-  addNoteButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 15 },
-  actionButton: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12 },
-  actionText: { color: '#FFFFFF', fontWeight: '700' },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
-  modalCard: { width: '100%', borderRadius: 16, padding: 20, borderWidth: 1 },
-  modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 8 },
-  modalMessage: { fontSize: 14, marginBottom: 12 },
-  modalInput: { minHeight: 80, borderWidth: 1, borderRadius: 10, padding: 10, marginBottom: 16 },
-  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12 },
-  modalButton: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
-  modalButtonText: { fontSize: 15, fontWeight: '600' },
-  notesTimelineHeader: {
+  actionButton: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    gap: 8, 
+    paddingVertical: 12, 
+    paddingHorizontal: 16, 
+    borderRadius: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  actionText: { 
+    color: '#FFFFFF', 
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  // Status Notes styles
+  noteContainer: {
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  noteHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 4,
   },
-  notesTimelineTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  notesTimelineContainer: {
-    gap: 12,
-  },
-  noteTimelineCard: {
-    padding: 12,
-    borderRadius: 8,
-    borderLeftWidth: 4,
-  },
-  noteTimelineHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  noteAuthor: {
+  noteStatus: {
+    fontSize: 13,
     fontWeight: '600',
-    fontSize: 14,
+    textTransform: 'capitalize',
   },
   noteDate: {
     fontSize: 12,
-    opacity: 0.9,
   },
   noteText: {
     fontSize: 14,
     lineHeight: 20,
+  },
+  actionButtonsContainer: {
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  modalContent: {
+    width: '100%',
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 16,
+  },
+  noteInput: {
+    borderRadius: 8,
+    padding: 12,
+    minHeight: 100,
+    textAlignVertical: 'top',
+    marginBottom: 16,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  modalButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  modalButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
 });
