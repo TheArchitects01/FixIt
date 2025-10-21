@@ -139,7 +139,7 @@ router.patch('/:id', requireAuth, async (req, res) => {
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
     const { id } = req.params;
-    const { status, assignedTo, rejectionNote, assignmentNote, statusNote } = req.body || {};
+    const { status, assignedTo, rejectionNote, assignmentNote, statusNote, conversationNote } = req.body || {};
 
     const allowedStatus = ['pending', 'in-progress', 'completed', 'resolved', 'rejected'];
     const update = {};
@@ -185,6 +185,19 @@ router.patch('/:id', requireAuth, async (req, res) => {
           update.wasEverAssigned = false;
         }
       }
+
+      // Admin adding conversation note
+      if (conversationNote && conversationNote.trim()) {
+        if (!update.$push) update.$push = {};
+        console.log('Admin adding conversation note. User profile image:', user.profileImage);
+        update.$push.conversationNotes = {
+          sender: 'admin',
+          senderName: user.name,
+          senderImage: user.profileImage || null,
+          message: conversationNote.trim(),
+          createdAt: new Date()
+        };
+      }
     } else if (user.role === 'staff') {
       const docCurrent = await Report.findById(id);
       if (!docCurrent) return res.status(404).json({ error: 'Report not found' });
@@ -192,15 +205,29 @@ router.patch('/:id', requireAuth, async (req, res) => {
         return res.status(403).json({ error: 'Forbidden' });
       }
 
-      // Staff adding status note
+      // Staff adding status note (old system)
       if (status && statusNote && statusNote.trim()) {
-        update.$push = {
-          statusNotes: {
-            status: status === 'completed' ? 'resolved' : status,
-            note: statusNote.trim(),
-            createdAt: new Date()
-          }
+        if (!update.$push) update.$push = {};
+        update.$push.statusNotes = {
+          status: status === 'completed' ? 'resolved' : status,
+          note: statusNote.trim(),
+          createdAt: new Date()
         };
+      }
+
+      // Staff adding conversation note (new system)
+      if (conversationNote && conversationNote.trim()) {
+        if (!update.$push) update.$push = {};
+        console.log('Staff adding conversation note. User profile image:', user.profileImage);
+        if (!update.$push.conversationNotes) {
+          update.$push.conversationNotes = {
+            sender: 'staff',
+            senderName: user.name,
+            senderImage: user.profileImage || null,
+            message: conversationNote.trim(),
+            createdAt: new Date()
+          };
+        }
       }
     } else {
       return res.status(403).json({ error: 'Forbidden' });

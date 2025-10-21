@@ -170,6 +170,4 @@ Option B — Browser print to PDF
 - Print (Ctrl+P) → Destination: “Save as PDF” → Save
 
 ---
-## 10) Support
-- If you’re stuck, share screenshots of errors and your `.env` values (hide passwords)
-- Confirm your IP and port, and that both backend and Expo are running
+

@@ -21,9 +21,17 @@ const ReportSchema = new mongoose.Schema(
     // New note fields
     rejectionNote: { type: String, default: '' }, // For admin to student (required when rejecting)
     assignmentNote: { type: String, default: '' }, // For admin to staff
-    statusNotes: [{ // For staff to admin
+    statusNotes: [{ // For staff to admin (old system, kept for backward compatibility)
       status: { type: String, enum: ['in-progress', 'resolved'] },
       note: { type: String },
+      createdAt: { type: Date, default: Date.now }
+    }],
+    // New conversation system between admin and staff
+    conversationNotes: [{
+      sender: { type: String, enum: ['admin', 'staff'], required: true }, // Who sent the message
+      senderName: { type: String, required: true }, // Name of the sender
+      senderImage: { type: String, default: null }, // Profile image of the sender
+      message: { type: String, required: true },
       createdAt: { type: Date, default: Date.now }
     }],
   },

@@ -15,7 +15,7 @@ interface Report {
   title: string;
   description: string;
   location: string;
-  status: 'pending' | 'in-progress' | 'completed';
+  status: 'pending' | 'in-progress' | 'completed' | 'rejected';
   priority: 'low' | 'medium' | 'high' | 'urgent';
   studentId: string;
   createdAt: string;
@@ -62,7 +62,7 @@ export default function StudentDashboard() {
     }, [])
   );
 
-  const activeIssues = reports.filter(report => report.status !== 'completed');
+  const activeIssues = reports.filter(report => report.status !== 'completed' && report.status !== 'rejected');
   const handleReportNewIssue = () => {
     router.push('../report-issue');
   };
