@@ -96,7 +96,7 @@ export function AdminDashboard() {
             <View style={styles.headerText}>
               <Text style={{ ...styles.welcomeText, color: '#FEE2E2' }}>Admin Dashboard</Text>
               <Text style={[styles.nameText, { color: '#FFFFFF' }]}>{user?.name}</Text>
-              <Text style={[styles.subtitleText, { color: '#FECACA' }]}>Staff ID: {user?.staffId}</Text>
+              <Text style={[styles.subtitleText, { color: '#FECACA' }]}>Admin ID: {user?.staffId}</Text>
             </View>
             <TouchableOpacity 
               style={styles.profileButton}
@@ -112,7 +112,7 @@ export function AdminDashboard() {
             <View style={styles.headerText}>
               <Text style={{ ...styles.welcomeText, color: '#E5EDFF' }}>Admin Dashboard</Text>
               <Text style={[styles.nameText, { color: '#FFFFFF' }]}>{user?.name}</Text>
-              <Text style={[styles.subtitleText, { color: '#BFD2FF' }]}>Staff ID: {user?.staffId}</Text>
+              <Text style={[styles.subtitleText, { color: '#BFD2FF' }]}>Admin ID: {user?.staffId}</Text>
             </View>
             <TouchableOpacity 
               style={styles.profileButton}
