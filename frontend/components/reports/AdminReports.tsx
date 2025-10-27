@@ -157,12 +157,6 @@ export function AdminReports() {
     }
   };
 
-  const requestStatusChange = (reportId: string, newStatus: 'pending' | 'in-progress' | 'completed' | 'rejected') => {
-    setPendingUpdate({ id: reportId, status: newStatus });
-    setNoteText('');
-    setNoteVisible(true);
-  };
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending': return theme.colors.warning;
