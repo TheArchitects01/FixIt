@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { ThemeProvider } from '@/components/common/ThemeProvider';
+import { SocketProvider } from '@/contexts/SocketContext';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
@@ -36,7 +37,9 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ThemeProvider>
         <AuthProvider>
-          <RootLayoutNav />
+          <SocketProvider>
+            <RootLayoutNav />
+          </SocketProvider>
         </AuthProvider>
       </ThemeProvider>
     </SafeAreaProvider>

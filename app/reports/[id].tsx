@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Image, TouchableOpacity, Alert, TextInput, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Image, TouchableOpacity, Alert, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/components/common/ThemeProvider';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSocket } from '@/contexts/SocketContext';
 import { Card } from '@/components/common/Card';
 import { ArrowLeft, MapPin, Clock, AlertTriangle, CheckCircle, Play, RefreshCw, MessageSquare } from 'lucide-react-native';
 import { StatusBadge } from '@/components/common/StatusBadge';
@@ -43,14 +44,16 @@ export default function ReportDetailsScreen() {
   const router = useRouter();
   const { theme, isDark } = useTheme();
   const { user } = useAuth();
+  const { socket, connected, joinReport, leaveReport } = useSocket();
   const [report, setReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [noteModalVisible, setNoteModalVisible] = useState(false);
   const [note, setNote] = useState('');
   const [statusToUpdateAfterNote, setStatusToUpdateAfterNote] = useState<'in-progress' | 'completed' | null>(null);
-  const [conversationModalVisible, setConversationModalVisible] = useState(false);
   const [conversationMessage, setConversationMessage] = useState('');
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const scrollViewRef = React.useRef<ScrollView>(null);
 
   const formatDate = (val: any) => {
     const jsDate = val?.toDate ? val.toDate() : (typeof val === 'string' ? new Date(val) : new Date());
@@ -100,7 +103,59 @@ export default function ReportDetailsScreen() {
     }
   };
 
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => { 
+    load(); 
+    
+    // Join the report room for real-time updates
+    if (id) {
+      joinReport(id);
+      console.log(`🔌 Joined report room: ${id}`);
+    }
+    
+    return () => {
+      if (id) {
+        leaveReport(id);
+        console.log(`👋 Left report room: ${id}`);
+      }
+    };
+  }, [id]);
+
+  // Listen for new messages via socket
+  useEffect(() => {
+    if (!socket || !id) return;
+
+    const handleNewMessage = (data: { reportId: string; message: any }) => {
+      console.log('📨 New message received via socket:', data);
+      if (data.reportId === id) {
+        setReport(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            conversationNotes: [...(prev.conversationNotes || []), data.message]
+          };
+        });
+        // Scroll to bottom when new message arrives
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    };
+
+    socket.on('newMessage', handleNewMessage);
+
+    return () => {
+      socket.off('newMessage', handleNewMessage);
+    };
+  }, [socket, id]);
+
+  // Auto-scroll to bottom when conversation notes change
+  useEffect(() => {
+    if (report?.conversationNotes && report.conversationNotes.length > 0) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  }, [report?.conversationNotes?.length]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -143,8 +198,18 @@ export default function ReportDetailsScreen() {
   }
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: '#000000' }]}> 
-      <View style={[styles.header, { borderBottomColor: isDark ? theme.colors.border : '#1F3A52' }]}> 
+    <View style={{ flex: 1, backgroundColor: '#000000' }}>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1, backgroundColor: '#000000' }}
+        keyboardVerticalOffset={28=}
+      >
+      <ScrollView 
+        style={[styles.container, { backgroundColor: '#000000' }]}
+        contentContainerStyle={{ backgroundColor: '#000000', flexGrow: 1 }}
+        keyboardShouldPersistTaps="handled"
+      > 
+        <View style={[styles.header, { borderBottomColor: isDark ? theme.colors.border : '#1F3A52' }]}> 
         <TouchableOpacity onPress={() => {
           if (router.canGoBack()) {
             router.back();
@@ -199,6 +264,35 @@ export default function ReportDetailsScreen() {
         <Text style={[styles.sectionLabel, { color: isDark ? theme.colors.text : '#FFFFFF' }]}>Description</Text>
         <Text style={[styles.description, { color: isDark ? theme.colors.textSecondary : '#D7E2FF' }]}>{report.description || 'No description provided.'}</Text>
 
+        {/* Staff Status Change Buttons */}
+        {user?.role === 'staff' && report.status !== 'completed' && (
+          <View style={[styles.actionButtonsContainer, { backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.1)' }]}>
+            {report.status === 'pending' ? (
+              <TouchableOpacity 
+                style={[styles.actionButton, { backgroundColor: '#10B981' }]} 
+                onPress={() => {
+                  setNoteModalVisible(true);
+                  setStatusToUpdateAfterNote('in-progress');
+                }}
+              >
+                <Play size={18} color="#FFFFFF" />
+                <Text style={styles.actionText}>Start Progress</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity 
+                style={[styles.actionButton, { backgroundColor: '#10B981' }]} 
+                onPress={() => {
+                  setNoteModalVisible(true);
+                  setStatusToUpdateAfterNote('completed');
+                }}
+              >
+                <CheckCircle size={18} color="#FFFFFF" />
+                <Text style={styles.actionText}>Mark Complete</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
         {/* Status Notes Section */}
         {report.statusNotes && report.statusNotes.length > 0 && (
           <>
@@ -222,140 +316,189 @@ export default function ReportDetailsScreen() {
         {/* Conversation Notes Section - Only for Admin and Staff */}
         {(user?.role === 'admin' || user?.role === 'staff') && report.status !== 'completed' && report.assignedTo && (
           <>
-            <Text style={[styles.sectionLabel, { color: isDark ? theme.colors.text : '#FFFFFF', marginTop: 16 }]}>
-              Admin-Staff Conversation
-            </Text>
-            {report.conversationNotes && report.conversationNotes.length > 0 ? (
-              <View style={[styles.conversationContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.08)' }]}>
-                {report.conversationNotes.map((msg, index) => (
-                  <View 
-                    key={index} 
-                    style={[
-                      styles.messageWrapper,
-                      msg.sender === 'admin' ? { flexDirection: 'row' } : { flexDirection: 'row-reverse' }
-                    ]}
-                  >
-                    {/* Profile Image */}
-                    {msg.senderImage ? (
-                      <Image 
-                        source={{ uri: msg.senderImage }} 
-                        style={styles.profileImage}
-                      />
-                    ) : (
-                      <View style={[styles.profileImagePlaceholder, { 
-                        backgroundColor: msg.sender === 'admin' ? '#DC2626' : '#10B981' 
-                      }]}>
-                        <Text style={styles.profileImageText}>
-                          {msg.senderName.charAt(0).toUpperCase()}
-                        </Text>
-                      </View>
-                    )}
-                    
-                    {/* Message Bubble */}
-                    <View 
-                      style={[
-                        styles.messageContainer,
-                        msg.sender === 'admin' 
-                          ? { backgroundColor: isDark ? 'rgba(220, 38, 38, 0.2)' : 'rgba(220, 38, 38, 0.15)' }
-                          : { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.2)' : 'rgba(16, 185, 129, 0.15)' }
-                      ]}
-                    >
-                      <View style={styles.messageHeader}>
-                        <Text style={[styles.senderName, { color: msg.sender === 'admin' ? '#DC2626' : '#10B981' }]}>
-                          {msg.senderName} ({msg.sender})
-                        </Text>
-                        <Text style={[styles.messageDate, { color: isDark ? theme.colors.textSecondary : '#BFD2FF' }]}>
-                          {formatNoteDate(msg.createdAt)}
-                        </Text>
-                      </View>
-                      <Text style={[styles.messageText, { color: isDark ? theme.colors.text : '#FFFFFF' }]}>{msg.message}</Text>
-                    </View>
-                  </View>
-                ))}
+            {/* Chat Header */}
+            <View style={[styles.chatHeader, { 
+              backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.1)',
+              borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.2)'
+            }]}>
+              <View style={styles.chatHeaderLeft}>
+                <MessageSquare size={20} color={isDark ? '#FFFFFF' : '#FFFFFF'} />
+                <Text style={[styles.chatTitle, { color: isDark ? '#FFFFFF' : '#FFFFFF' }]}>
+                  Messages
+                </Text>
               </View>
-            ) : (
-              <Text style={[styles.noMessages, { color: isDark ? theme.colors.textSecondary : '#BFD2FF' }]}>
-                No messages yet. Start the conversation!
-              </Text>
-            )}
-            <TouchableOpacity
-              style={[styles.addMessageButton, { backgroundColor: user?.role === 'admin' ? '#DC2626' : '#10B981' }]}
-              onPress={() => setConversationModalVisible(true)}
-            >
-              <MessageSquare size={18} color="#FFFFFF" />
-              <Text style={styles.addMessageText}>Add Message</Text>
-            </TouchableOpacity>
+            </View>
+
+            {/* Chat Messages Area */}
+            <View style={[styles.chatContainer, { 
+              backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.1)',
+              borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.2)'
+            }]}>
+              {report.conversationNotes && report.conversationNotes.length > 0 ? (
+                <ScrollView 
+                  ref={scrollViewRef}
+                  style={styles.messagesScroll} 
+                  showsVerticalScrollIndicator={true}
+                  nestedScrollEnabled={true}
+                  contentContainerStyle={{ paddingBottom: 8 }}
+                  onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+                >
+                  {report.conversationNotes.map((msg, index) => {
+                    const isMyMessage = (user?.role === 'admin' && msg.sender === 'admin') || 
+                                       (user?.role === 'staff' && msg.sender === 'staff');
+                    return (
+                      <View 
+                        key={index} 
+                        style={[
+                          styles.messageWrapper,
+                          isMyMessage ? styles.myMessageWrapper : styles.theirMessageWrapper
+                        ]}
+                      >
+                        {/* Their message - show profile image */}
+                        {!isMyMessage && (
+                          msg.senderImage ? (
+                            <Image 
+                              source={{ uri: msg.senderImage }} 
+                              style={styles.profileImage}
+                            />
+                          ) : (
+                            <View style={[styles.profileImagePlaceholder, { 
+                              backgroundColor: msg.sender === 'admin' ? '#DC2626' : '#10B981' 
+                            }]}>
+                              <Text style={styles.profileImageText}>
+                                {msg.senderName.charAt(0).toUpperCase()}
+                              </Text>
+                            </View>
+                          )
+                        )}
+                        
+                        {/* Message Bubble */}
+                        <View style={styles.messageBubbleContainer}>
+                          <View 
+                            style={[
+                              styles.messageBubble,
+                              isMyMessage 
+                                ? [styles.myMessage, { backgroundColor: user?.role === 'admin' ? '#DC2626' : '#10B981' }]
+                                : [styles.theirMessage, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.2)' }]
+                            ]}
+                          >
+                            {!isMyMessage && (
+                              <Text style={[styles.senderNameInBubble, { 
+                                color: msg.sender === 'admin' ? '#DC2626' : '#10B981' 
+                              }]}>
+                                {msg.senderName}
+                              </Text>
+                            )}
+                            <Text style={[styles.messageText, { 
+                              color: isMyMessage ? '#FFFFFF' : (isDark ? '#FFFFFF' : '#000000')
+                            }]}>
+                              {msg.message}
+                            </Text>
+                            <Text style={[styles.messageTime, { 
+                              color: isMyMessage ? 'rgba(255,255,255,0.7)' : (isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)')
+                            }]}>
+                              {formatNoteDate(msg.createdAt)}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {/* My message - show profile image */}
+                        {isMyMessage && (
+                          msg.senderImage ? (
+                            <Image 
+                              source={{ uri: msg.senderImage }} 
+                              style={styles.profileImage}
+                            />
+                          ) : (
+                            <View style={[styles.profileImagePlaceholder, { 
+                              backgroundColor: user?.role === 'admin' ? '#DC2626' : '#10B981' 
+                            }]}>
+                              <Text style={styles.profileImageText}>
+                                {msg.senderName.charAt(0).toUpperCase()}
+                              </Text>
+                            </View>
+                          )
+                        )}
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+              ) : (
+                <View style={styles.emptyMessagesContainer}>
+                  <MessageSquare size={48} color={isDark ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.5)'} />
+                  <Text style={[styles.noMessages, { color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.7)' }]}>
+                    No messages yet
+                  </Text>
+                  <Text style={[styles.noMessagesSubtext, { color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.5)' }]}>
+                    Start the conversation below
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Message Input Area */}
+            <View style={[styles.messageInputContainer, { 
+              backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.1)',
+              borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.2)'
+            }]}>
+              <TextInput
+                style={[styles.messageInput, { 
+                  color: isDark ? theme.colors.text : '#FFFFFF',
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.15)',
+                  borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.25)'
+                }]}
+                placeholder="Type a message..."
+                placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.6)'}
+                value={conversationMessage}
+                onChangeText={setConversationMessage}
+                multiline
+                maxLength={500}
+                editable={!isSendingMessage}
+              />
+              <TouchableOpacity
+                style={[styles.sendButton, { 
+                  backgroundColor: user?.role === 'admin' ? '#DC2626' : '#10B981',
+                  opacity: conversationMessage.trim() && !isSendingMessage ? 1 : 0.5
+                }]}
+                disabled={!conversationMessage.trim() || isSendingMessage}
+                onPress={async () => {
+                  if (!conversationMessage.trim() || isSendingMessage) return;
+                  
+                  try {
+                    setIsSendingMessage(true);
+                    const messageToSend = conversationMessage.trim();
+                    setConversationMessage('');
+                    
+                    const token = await AsyncStorage.getItem('token');
+                    await apiPatch(`/reports/${id}`, { 
+                      conversationNote: messageToSend
+                    }, token || undefined);
+                    
+                    console.log('✅ Message sent successfully');
+                  } catch (e) {
+                    console.error('Send message failed', e);
+                    Alert.alert('Error', 'Failed to send message. Please try again.');
+                  } finally {
+                    setIsSendingMessage(false);
+                  }
+                }}
+              >
+                {isSendingMessage ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <MessageSquare size={20} color="#FFFFFF" />
+                    <Text style={styles.sendButtonText}>Send</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
           </>
         )}
 
         {report.photo && (
           <Image source={{ uri: report.photo }} style={styles.image} resizeMode="cover" />
         )}
-
-        {/* Conversation Modal */}
-        <Modal
-          animationType="fade"
-          transparent={true}
-          visible={conversationModalVisible}
-          onRequestClose={() => setConversationModalVisible(false)}
-          statusBarTranslucent={true}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={[styles.modalContent, { backgroundColor: isDark ? theme.colors.card : '#27445D' }]}>
-              <Text style={[styles.modalTitle, { color: isDark ? theme.colors.text : '#FFFFFF' }]}>
-                Send Message
-              </Text>
-              <TextInput
-                style={[styles.noteInput, { 
-                  color: isDark ? theme.colors.text : '#FFFFFF',
-                  backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.1)',
-                }]}
-                placeholder="Type your message..."
-                placeholderTextColor={isDark ? theme.colors.textSecondary : '#BFD2FF'}
-                value={conversationMessage}
-                onChangeText={setConversationMessage}
-                multiline
-              />
-              <View style={styles.modalButtons}>
-                <TouchableOpacity 
-                  style={[styles.modalButton, { backgroundColor: '#EF4444' }]}
-                  onPress={() => {
-                    setConversationModalVisible(false);
-                    setConversationMessage('');
-                  }}
-                >
-                  <Text style={styles.modalButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.modalButton, { backgroundColor: user?.role === 'admin' ? '#DC2626' : '#10B981' }]}
-                  onPress={async () => {
-                    if (!conversationMessage.trim()) {
-                      Alert.alert('Error', 'Please enter a message');
-                      return;
-                    }
-                    try {
-                      setConversationModalVisible(false);
-                      
-                      const token = await AsyncStorage.getItem('token');
-                      await apiPatch(`/reports/${id}`, { 
-                        conversationNote: conversationMessage.trim()
-                      }, token || undefined);
-                      
-                      setConversationMessage('');
-                      await load();
-                      Alert.alert('Success', 'Message sent successfully');
-                    } catch (e) {
-                      console.error('Send message failed', e);
-                      Alert.alert('Error', 'Failed to send message');
-                    }
-                  }}
-                >
-                  <Text style={styles.modalButtonText}>Send</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
 
         {/* Note Modal */}
         <Modal
@@ -431,36 +574,10 @@ export default function ReportDetailsScreen() {
           </View>
         </Modal>
 
-        {/* Staff Status Change Buttons */}
-        {user?.role === 'staff' && report.status !== 'completed' && (
-          <View style={[styles.actionButtonsContainer, { backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.1)' }]}>
-            {report.status === 'pending' ? (
-              <TouchableOpacity 
-                style={[styles.actionButton, { backgroundColor: '#10B981' }]} 
-                onPress={() => {
-                  setNoteModalVisible(true);
-                  setStatusToUpdateAfterNote('in-progress');
-                }}
-              >
-                <Play size={18} color="#FFFFFF" />
-                <Text style={styles.actionText}>Start Progress</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity 
-                style={[styles.actionButton, { backgroundColor: '#10B981' }]} 
-                onPress={() => {
-                  setNoteModalVisible(true);
-                  setStatusToUpdateAfterNote('completed');
-                }}
-              >
-                <CheckCircle size={18} color="#FFFFFF" />
-                <Text style={styles.actionText}>Mark Complete</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
       </Card>
-    </ScrollView>
+      </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -587,30 +704,95 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '600',
   },
-  // Conversation styles
-  conversationContainer: {
+  // Chat UI Styles
+  chatHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     padding: 12,
     borderRadius: 12,
+    marginTop: 16,
+    borderWidth: 1,
+  },
+  chatHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  chatTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  chatContainer: {
+    flex: 1,
+    minHeight: 200,
+    maxHeight: 400,
+    borderRadius: 12,
     marginTop: 8,
-    gap: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  messagesScroll: {
+    flex: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
   },
   messageWrapper: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'flex-end',
     gap: 8,
     marginVertical: 4,
+    paddingHorizontal: 4,
+  },
+  myMessageWrapper: {
+    justifyContent: 'flex-end',
+  },
+  theirMessageWrapper: {
+    justifyContent: 'flex-start',
+  },
+  messageBubbleContainer: {
+    maxWidth: '70%',
+  },
+  messageBubble: {
+    padding: 12,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  myMessage: {
+    borderBottomRightRadius: 4,
+  },
+  theirMessage: {
+    borderBottomLeftRadius: 4,
+  },
+  senderNameInBubble: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  messageText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  messageTime: {
+    fontSize: 10,
+    marginTop: 4,
+    alignSelf: 'flex-end',
   },
   profileImage: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.3)',
   },
   profileImagePlaceholder: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
@@ -618,58 +800,146 @@ const styles = StyleSheet.create({
   },
   profileImageText: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  messageContainer: {
-    maxWidth: '75%',
-    padding: 12,
-    borderRadius: 12,
-  },
-  messageHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-    gap: 8,
-  },
-  senderName: {
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'capitalize',
-  },
-  messageDate: {
-    fontSize: 11,
-  },
-  messageText: {
     fontSize: 14,
-    lineHeight: 20,
+    fontWeight: '700',
+  },
+  emptyMessagesContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
   },
   noMessages: {
-    fontSize: 14,
-    fontStyle: 'italic',
-    textAlign: 'center',
-    marginTop: 8,
-    marginBottom: 12,
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 12,
   },
-  addMessageButton: {
+  noMessagesSubtext: {
+    fontSize: 13,
+    marginTop: 4,
+  },
+  messageInputContainer: {
+    marginTop: 8,
+    padding: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  messageInput: {
+    flex: 1,
+    minHeight: 40,
+    maxHeight: 100,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    fontSize: 15,
+    borderWidth: 1,
+  },
+  sendButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
+    gap: 6,
+    paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 12,
-    marginTop: 12,
+    borderRadius: 20,
+    minWidth: 80,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
   },
-  addMessageText: {
+  sendButtonText: {
     color: '#FFFFFF',
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 15,
+  },
+  onlineIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  onlineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
+    marginRight: 4,
+  },
+  onlineText: {
+    fontSize: 12,
+    color: '#10B981',
+    fontWeight: '600',
+  },
+  // Chat Modal Styles
+  chatModalContent: {
+    width: '90%',
+    borderRadius: 20,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
+    elevation: 8,
+  },
+  chatModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 20,
+  },
+  chatModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  chatInput: {
+    borderRadius: 12,
+    padding: 14,
+    minHeight: 100,
+    maxHeight: 200,
+    textAlignVertical: 'top',
+    fontSize: 15,
+    borderWidth: 1,
+    marginBottom: 20,
+  },
+  chatModalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  chatModalButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  cancelButton: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderWidth: 1,
+    borderColor: '#EF4444',
+  },
+  sendButtonModal: {
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  chatModalButtonText: {
+    fontWeight: '700',
+    fontSize: 15,
   },
 });

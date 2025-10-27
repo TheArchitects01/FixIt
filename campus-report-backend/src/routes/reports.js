@@ -2,6 +2,7 @@ import express from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import Report from '../models/Report.js';
 import User from '../models/User.js';
+import { getIO } from '../config/socket.js';
 
 const router = express.Router();
 
@@ -190,13 +191,28 @@ router.patch('/:id', requireAuth, async (req, res) => {
       if (conversationNote && conversationNote.trim()) {
         if (!update.$push) update.$push = {};
         console.log('Admin adding conversation note. User profile image:', user.profileImage);
-        update.$push.conversationNotes = {
+        
+        const newMessage = {
           sender: 'admin',
           senderName: user.name,
           senderImage: user.profileImage || null,
           message: conversationNote.trim(),
           createdAt: new Date()
         };
+        
+        update.$push.conversationNotes = newMessage;
+        
+        // Emit socket event for real-time update
+        try {
+          const io = getIO();
+          io.to(`report-${id}`).emit('newMessage', {
+            reportId: id,
+            message: newMessage
+          });
+          console.log(`💬 Socket: Admin message sent to room report-${id}`);
+        } catch (err) {
+          console.error('Socket emit error:', err);
+        }
       }
     } else if (user.role === 'staff') {
       const docCurrent = await Report.findById(id);
@@ -219,14 +235,29 @@ router.patch('/:id', requireAuth, async (req, res) => {
       if (conversationNote && conversationNote.trim()) {
         if (!update.$push) update.$push = {};
         console.log('Staff adding conversation note. User profile image:', user.profileImage);
+        
+        const newMessage = {
+          sender: 'staff',
+          senderName: user.name,
+          senderImage: user.profileImage || null,
+          message: conversationNote.trim(),
+          createdAt: new Date()
+        };
+        
         if (!update.$push.conversationNotes) {
-          update.$push.conversationNotes = {
-            sender: 'staff',
-            senderName: user.name,
-            senderImage: user.profileImage || null,
-            message: conversationNote.trim(),
-            createdAt: new Date()
-          };
+          update.$push.conversationNotes = newMessage;
+        }
+        
+        // Emit socket event for real-time update
+        try {
+          const io = getIO();
+          io.to(`report-${id}`).emit('newMessage', {
+            reportId: id,
+            message: newMessage
+          });
+          console.log(`💬 Socket: Staff message sent to room report-${id}`);
+        } catch (err) {
+          console.error('Socket emit error:', err);
         }
       }
     } else {
