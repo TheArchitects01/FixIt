@@ -42,13 +42,18 @@ export default function CampusReports() {
     try {
       const token = await AsyncStorage.getItem('token');
       if (!token) {
+        console.log('❌ No token found');
         setReports([]);
         return;
       }
       
+      console.log('🔍 Fetching campus reports...');
       // All users can see campus reports
       const resp = await apiGet('/reports', token || undefined);
+      console.log('📥 API Response:', resp);
       const list = Array.isArray(resp?.reports) ? resp.reports : [];
+      console.log(`📊 Found ${list.length} reports from API`);
+      
       const mappedReports: ReportItem[] = list.map((report: any) => ({
         id: report._id || report.id,
         title: report.title,
@@ -62,6 +67,7 @@ export default function CampusReports() {
         assignedTo: report.assignedTo,
         adminNotes: report.adminNotes,
       }));
+      console.log(`✅ Mapped ${mappedReports.length} reports`);
       setReports(mappedReports);
     } catch (error: any) {
       console.error('❌ Failed to load reports:', error?.message || error);
